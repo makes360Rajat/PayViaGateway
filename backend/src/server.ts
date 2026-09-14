@@ -3,6 +3,7 @@ import cors from 'cors';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import authRoutes from './routes/authRoutes';
 import merchantRoutes from './routes/merchantRoutes';
@@ -32,7 +33,7 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Serve static assets if needed
+// Serve static assets
 app.use('/public', express.static(path.join(__dirname, '../public')));
 
 // API Routes Mounts
@@ -52,10 +53,37 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: true,
     service: 'PayVia Gateway & Verification Core',
+    domain: 'payvia360.com',
     version: '1.0.0',
     timestamp: new Date().toISOString()
   });
 });
+
+// Production React Frontend SPA Static Serving
+const possibleFrontendPaths = [
+  path.join(__dirname, '../../frontend/dist'),
+  path.join(__dirname, '../frontend/dist'),
+  path.join(__dirname, './public_html'),
+  path.join(__dirname, '../dist_web')
+];
+
+let activeFrontendDist = '';
+for (const p of possibleFrontendPaths) {
+  if (fs.existsSync(p)) {
+    activeFrontendDist = p;
+    break;
+  }
+}
+
+if (activeFrontendDist) {
+  app.use(express.static(activeFrontendDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/public') || req.path.startsWith('/ws')) {
+      return next();
+    }
+    res.sendFile(path.join(activeFrontendDist, 'index.html'));
+  });
+}
 
 // WebSocket real-time connection for checkout pages & dashboard firehose
 wss.on('connection', (ws: WebSocket, req) => {

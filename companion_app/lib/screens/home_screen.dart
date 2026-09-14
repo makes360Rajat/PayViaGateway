@@ -19,7 +19,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isPaired = false;
   String? _deviceToken;
   String? _pairingCode;
-  String _serverUrl = 'http://192.168.1.9:5001';
+  String _serverUrl = 'https://payvia360.com';
   bool _isOnline = false;
   Timer? _heartbeatTimer;
   final List<SmsTransaction> _transactions = [];

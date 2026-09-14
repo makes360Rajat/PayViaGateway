@@ -88,7 +88,7 @@ void main() async {
   print('=== PayViaGateway Dart Client Demo ===');
 
   final client = PayViaGatewayClient(
-    baseUrl: 'http://192.168.1.9:5001',
+    baseUrl: 'https://payvia360.com',
     apiKey: 'pv_live_8f91a2b3c4d5e6f7a8b9c0d1e2f3a4b5',
     webhookSecret: 'YOUR_WEBHOOK_SECRET',
   );

@@ -5,9 +5,10 @@ const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
 const routerEngine_1 = require("../services/routerEngine");
 const detectionEngine_1 = require("../services/detectionEngine");
+const webhookService_1 = require("../services/webhookService");
 const uuid_1 = require("uuid");
 const router = (0, express_1.Router)();
-const BASE_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const BASE_FRONTEND_URL = process.env.FRONTEND_URL || 'https://payvia360.com';
 // ==========================================
 // 1. PUBLIC REST API (For Merchant Backends)
 // ==========================================
@@ -46,7 +47,17 @@ router.post('/public/v1/order/create', auth_1.authenticateApiKey, (req, res) => 
         const linkToken = (0, uuid_1.v4)().replace(/-/g, '').slice(0, 16);
         const orderId = `BYTE${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min window
-        const paymentUrl = `${BASE_FRONTEND_URL}/pay/${linkToken}`;
+        // Resolve Base URL dynamically from request origin/referer or fallback
+        let dynamicBaseUrl = BASE_FRONTEND_URL;
+        const originHeader = req.headers['origin'] || req.headers['referer'];
+        if (originHeader) {
+            try {
+                const parsed = new URL(originHeader);
+                dynamicBaseUrl = `${parsed.protocol}//${parsed.host}`;
+            }
+            catch (e) { }
+        }
+        const paymentUrl = `${dynamicBaseUrl}/pay/${linkToken}`;
         const newOrder = {
             id: `ord_${(0, uuid_1.v4)().slice(0, 8)}`,
             orderId,
@@ -236,6 +247,8 @@ router.post('/:id/force-verify', auth_1.authenticateToken, async (req, res) => {
     order.updatedAt = new Date().toISOString();
     order.rawVerificationData = { matchedBy: 'DASHBOARD_FORCE_VERIFY', verifiedBy: req.tenant.email };
     database_1.db.save();
+    // Dispatch Webhook to merchant callback
+    await webhookService_1.WebhookService.dispatchOrderCallback(order);
     return res.json({ status: true, message: 'Order marked as SUCCESS', data: order });
 });
 // Cancel Order

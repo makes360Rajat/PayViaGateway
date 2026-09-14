@@ -251,20 +251,22 @@ export const OrdersList: React.FC = () => {
                       {new Date(o.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
                     </td>
                     <td className="p-4 text-right space-x-1 font-sans">
-                      {o.status === 'PENDING' && (
+                      {(o.status === 'PENDING' || o.status === 'EXPIRED' || o.status === 'AWAITING_VERIFY') && (
                         <>
                           <button
                             onClick={() => { setSelectedOrder(o); setManualUtr(''); }}
                             className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 text-[11px] font-semibold text-emerald-400 hover:bg-emerald-500/20 transition"
                           >
-                            Force Settle
+                            {o.status === 'EXPIRED' ? 'Verify / Settle' : 'Force Settle'}
                           </button>
-                          <button
-                            onClick={() => handleCancelOrder(o.id)}
-                            className="rounded-lg bg-rose-500/10 border border-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-400 hover:bg-rose-500/20 transition"
-                          >
-                            Cancel
-                          </button>
+                          {o.status === 'PENDING' && (
+                            <button
+                              onClick={() => handleCancelOrder(o.id)}
+                              className="rounded-lg bg-rose-500/10 border border-rose-500/20 px-2 py-1 text-[11px] font-semibold text-rose-400 hover:bg-rose-500/20 transition"
+                            >
+                              Cancel
+                            </button>
+                          )}
                         </>
                       )}
                     </td>

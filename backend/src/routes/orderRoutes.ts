@@ -3,12 +3,13 @@ import { db } from '../db/database';
 import { authenticateApiKey, authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { RouterEngine } from '../services/routerEngine';
 import { DetectionEngine } from '../services/detectionEngine';
+import { WebhookService } from '../services/webhookService';
 import { Order, OrderStatus } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
-const BASE_FRONTEND_URL = process.env.FRONTEND_URL || 'http://192.168.1.9:5173';
+const BASE_FRONTEND_URL = process.env.FRONTEND_URL || 'https://payvia360.com';
 
 // ==========================================
 // 1. PUBLIC REST API (For Merchant Backends)
@@ -297,6 +298,9 @@ router.post('/:id/force-verify', authenticateToken, async (req: AuthenticatedReq
   order.updatedAt = new Date().toISOString();
   order.rawVerificationData = { matchedBy: 'DASHBOARD_FORCE_VERIFY', verifiedBy: req.tenant!.email };
   db.save();
+
+  // Dispatch Webhook to merchant callback
+  await WebhookService.dispatchOrderCallback(order);
 
   return res.json({ status: true, message: 'Order marked as SUCCESS', data: order });
 });

@@ -4,7 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
-  static const String _defaultServerUrl = 'http://192.168.1.9:5001';
+  static const String _defaultServerUrl = 'https://payvia360.com';
   static const String _defaultDeviceToken = 'dev_tok_991823abce1283';
   
   static Future<String> getServerUrl() async {

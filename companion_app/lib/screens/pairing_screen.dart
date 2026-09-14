@@ -10,7 +10,7 @@ class PairingScreen extends StatefulWidget {
 }
 
 class _PairingScreenState extends State<PairingScreen> {
-  final _serverUrlController = TextEditingController(text: 'http://192.168.1.9:5001');
+  final _serverUrlController = TextEditingController(text: 'https://payvia360.com');
   final _tokenController = TextEditingController(text: 'PAIR-4852');
   final _deviceNameController = TextEditingController(text: 'Android SMS Gateway Phone');
   bool _isLoading = false;
@@ -141,7 +141,7 @@ class _PairingScreenState extends State<PairingScreen> {
               style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
                 prefixIcon: const Icon(Icons.link, color: Colors.indigoAccent, size: 20),
-                hintText: 'http://192.168.1.9:5001',
+                hintText: 'https://payvia360.com',
                 hintStyle: const TextStyle(color: Colors.white30),
                 filled: true,
                 fillColor: const Color(0xFF111827),
@@ -161,8 +161,8 @@ class _PairingScreenState extends State<PairingScreen> {
               spacing: 8,
               runSpacing: 6,
               children: [
-                _buildIpChip('192.168.1.9 (Wi-Fi)', 'http://192.168.1.9:5001'),
-                _buildIpChip('localhost', 'http://localhost:5001'),
+                _buildIpChip('payvia360.com (Cloud)', 'https://payvia360.com'),
+                _buildIpChip('localhost:5001 (Dev)', 'http://localhost:5001'),
                 _buildIpChip('10.0.2.2 (Emulator)', 'http://10.0.2.2:5001'),
               ],
             ),

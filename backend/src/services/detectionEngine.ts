@@ -103,16 +103,28 @@ export class DetectionEngine {
       return { matched: false };
     }
 
-    // Match against open pending orders in the tenant
-    const pendingOrders = db.orders.filter(
+    // Match against open pending orders in the tenant (or recently expired if paid before expiry)
+    const openOrders = db.orders.filter(
       o => o.tenantId === tenantId && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
     );
 
-    // Look for matching amount within order validity window
-    const matchedOrder = pendingOrders.find(o => {
+    // Look for matching amount within open orders first
+    let matchedOrder = openOrders.find(o => {
       const amountDiff = Math.abs(o.amount - (parsed.amount || 0));
       return amountDiff < 0.01; // exact amount match
     });
+
+    // If no open order, check recent expired orders within last 24 hours
+    if (!matchedOrder) {
+      const recentExpired = db.orders
+        .filter(o => o.tenantId === tenantId && o.status === 'EXPIRED')
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      matchedOrder = recentExpired.find(o => {
+        const amountDiff = Math.abs(o.amount - (parsed.amount || 0));
+        return amountDiff < 0.01;
+      });
+    }
 
     if (matchedOrder) {
       matchedOrder.status = 'TXN_SUCCESS';

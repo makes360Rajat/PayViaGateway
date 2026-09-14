@@ -8,6 +8,7 @@ const cors_1 = __importDefault(require("cors"));
 const http_1 = __importDefault(require("http"));
 const ws_1 = require("ws");
 const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const dotenv_1 = __importDefault(require("dotenv"));
 const authRoutes_1 = __importDefault(require("./routes/authRoutes"));
 const merchantRoutes_1 = __importDefault(require("./routes/merchantRoutes"));
@@ -32,7 +33,7 @@ app.use((0, cors_1.default)({
 }));
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
-// Serve static assets if needed
+// Serve static assets
 app.use('/public', express_1.default.static(path_1.default.join(__dirname, '../public')));
 // API Routes Mounts
 app.use('/api/auth', authRoutes_1.default);
@@ -50,10 +51,34 @@ app.get('/api/health', (req, res) => {
     res.json({
         status: true,
         service: 'PayVia Gateway & Verification Core',
+        domain: 'payvia360.com',
         version: '1.0.0',
         timestamp: new Date().toISOString()
     });
 });
+// Production React Frontend SPA Static Serving
+const possibleFrontendPaths = [
+    path_1.default.join(__dirname, '../../frontend/dist'),
+    path_1.default.join(__dirname, '../frontend/dist'),
+    path_1.default.join(__dirname, './public_html'),
+    path_1.default.join(__dirname, '../dist_web')
+];
+let activeFrontendDist = '';
+for (const p of possibleFrontendPaths) {
+    if (fs_1.default.existsSync(p)) {
+        activeFrontendDist = p;
+        break;
+    }
+}
+if (activeFrontendDist) {
+    app.use(express_1.default.static(activeFrontendDist));
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/public') || req.path.startsWith('/ws')) {
+            return next();
+        }
+        res.sendFile(path_1.default.join(activeFrontendDist, 'index.html'));
+    });
+}
 // WebSocket real-time connection for checkout pages & dashboard firehose
 wss.on('connection', (ws, req) => {
     ws.on('message', (message) => {

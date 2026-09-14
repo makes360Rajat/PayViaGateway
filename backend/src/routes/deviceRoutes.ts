@@ -38,11 +38,15 @@ router.post('/generate-pairing', authenticateToken, (req: AuthenticatedRequest, 
   db.save();
 
   const originHeader = req.headers['origin'] || req.headers['referer'];
-  let dynamicServerUrl = 'http://192.168.1.9:5001';
+  let dynamicServerUrl = process.env.API_BASE_URL || 'https://payvia360.com';
   if (originHeader) {
     try {
       const parsed = new URL(originHeader as string);
-      dynamicServerUrl = `${parsed.protocol}//${parsed.hostname}:5001`;
+      if (parsed.hostname.includes('localhost') || parsed.hostname.includes('192.168.')) {
+        dynamicServerUrl = `${parsed.protocol}//${parsed.hostname}:5001`;
+      } else {
+        dynamicServerUrl = `${parsed.protocol}//${parsed.host}`;
+      }
     } catch (e) {}
   }
 
