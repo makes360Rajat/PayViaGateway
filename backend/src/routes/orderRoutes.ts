@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
-const BASE_FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
+const BASE_FRONTEND_URL = process.env.FRONTEND_URL || 'http://192.168.1.9:5173';
 
 // ==========================================
 // 1. PUBLIC REST API (For Merchant Backends)
@@ -66,7 +66,17 @@ router.post('/public/v1/order/create', authenticateApiKey, (req: AuthenticatedRe
     const orderId = `BYTE${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min window
 
-    const paymentUrl = `${BASE_FRONTEND_URL}/pay/${linkToken}`;
+    // Resolve Base URL dynamically from request origin/referer or fallback
+    let dynamicBaseUrl = BASE_FRONTEND_URL;
+    const originHeader = req.headers['origin'] || req.headers['referer'];
+    if (originHeader) {
+      try {
+        const parsed = new URL(originHeader as string);
+        dynamicBaseUrl = `${parsed.protocol}//${parsed.host}`;
+      } catch (e) {}
+    }
+
+    const paymentUrl = `${dynamicBaseUrl}/pay/${linkToken}`;
 
     const newOrder: Order = {
       id: `ord_${uuidv4().slice(0, 8)}`,

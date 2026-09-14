@@ -18,6 +18,8 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isPaired = false;
   String? _deviceToken;
+  String? _pairingCode;
+  String _serverUrl = 'http://192.168.1.9:5001';
   bool _isOnline = false;
   Timer? _heartbeatTimer;
   final List<SmsTransaction> _transactions = [];
@@ -44,16 +46,22 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _checkPairingStatus() async {
     final token = await ApiClient.getDeviceToken();
+    final code = await ApiClient.getPairingCode();
+    final url = await ApiClient.getServerUrl();
     if (token != null && token.isNotEmpty) {
       setState(() {
         _isPaired = true;
         _deviceToken = token;
+        _pairingCode = code;
+        _serverUrl = url;
       });
       _startHeartbeat();
     } else {
       setState(() {
         _isPaired = false;
         _deviceToken = null;
+        _pairingCode = code;
+        _serverUrl = url;
       });
     }
   }
@@ -212,25 +220,69 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
-                      if (!_isPaired)
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.indigo.shade600,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          ),
-                          onPressed: () async {
-                            final paired = await Navigator.push<bool>(
-                              context,
-                              MaterialPageRoute(builder: (_) => const PairingScreen()),
-                            );
-                            if (paired == true) _checkPairingStatus();
-                          },
-                          child: const Text('Pair Device', style: TextStyle(fontSize: 11, color: Colors.white)),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isPaired ? Colors.white.withOpacity(0.08) : Colors.indigo.shade600,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
+                        onPressed: () async {
+                          final paired = await Navigator.push<bool>(
+                            context,
+                            MaterialPageRoute(builder: (_) => const PairingScreen()),
+                          );
+                          _checkPairingStatus();
+                        },
+                        icon: const Icon(Icons.qr_code, size: 14, color: Colors.white),
+                        label: Text(
+                          _isPaired ? 'Pair / Change ID' : 'Pair Device',
+                          style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
                     ],
                   ),
+                  const SizedBox(height: 12),
+                  // Server IP Indicator
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black45,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.dns, size: 14, color: Colors.tealAccent),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Server: $_serverUrl',
+                            style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 11),
+                          ),
+                        ),
+                        if (_pairingCode != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.indigo.shade600.withOpacity(0.3),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.indigo.shade400.withOpacity(0.4)),
+                            ),
+                            child: Text(
+                              _pairingCode!,
+                              style: GoogleFonts.jetBrainsMono(
+                                color: Colors.amberAccent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                   if (_isPaired && _deviceToken != null) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
@@ -245,6 +297,16 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Text(
                               'Token: ${_deviceToken!.length > 16 ? _deviceToken!.substring(0, 16) : _deviceToken}...',
                               style: GoogleFonts.jetBrainsMono(color: Colors.white70, fontSize: 11),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: () async {
+                              await ApiClient.disconnectDevice();
+                              _checkPairingStatus();
+                            },
+                            child: const Text(
+                              'Disconnect',
+                              style: TextStyle(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],

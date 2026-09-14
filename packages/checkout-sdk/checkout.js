@@ -12,7 +12,7 @@
         return;
       }
 
-      var paymentUrl = options.payment_url || ('http://localhost:5173/pay/' + options.token);
+      var paymentUrl = options.payment_url || ('http://192.168.1.9:5173/pay/' + options.token);
 
       if (options.mode === 'redirect') {
         window.location.href = paymentUrl;

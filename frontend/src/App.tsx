@@ -22,6 +22,7 @@ export const MainApp: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<string>('landing');
   const [previewTemplateId, setPreviewTemplateId] = useState<string>('template_1');
   const [checkoutToken, setCheckoutToken] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
   // Check URL pathname for /pay/:token or hash routing
   useEffect(() => {
@@ -76,13 +77,22 @@ export const MainApp: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#090d16] text-slate-100 flex flex-col font-sans">
-      <Navbar onNavigate={handleNavigate} currentPage={currentPage} />
+    <div className="min-h-screen bg-[#040f0c] text-emerald-50 flex flex-col font-sans">
+      <Navbar
+        onNavigate={handleNavigate}
+        currentPage={currentPage}
+        onToggleMobileMenu={() => setIsMobileMenuOpen(prev => !prev)}
+      />
 
       <div className="flex flex-1">
-        {/* Render Sidebar only for authenticated workspace pages */}
+        {/* Render Sidebar for authenticated workspace pages */}
         {user && currentPage !== 'landing' && currentPage !== 'auth' && (
-          <Sidebar currentPage={currentPage} onNavigate={handleNavigate} />
+          <Sidebar
+            currentPage={currentPage}
+            onNavigate={handleNavigate}
+            isOpen={isMobileMenuOpen}
+            onClose={() => setIsMobileMenuOpen(false)}
+          />
         )}
 
         {/* Main Content View */}

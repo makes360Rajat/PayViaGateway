@@ -10,8 +10,8 @@ class PairingScreen extends StatefulWidget {
 }
 
 class _PairingScreenState extends State<PairingScreen> {
-  final _serverUrlController = TextEditingController(text: 'http://localhost:5001');
-  final _tokenController = TextEditingController();
+  final _serverUrlController = TextEditingController(text: 'http://192.168.1.9:5001');
+  final _tokenController = TextEditingController(text: 'PAIR-4852');
   final _deviceNameController = TextEditingController(text: 'Android SMS Gateway Phone');
   bool _isLoading = false;
 
@@ -19,7 +19,14 @@ class _PairingScreenState extends State<PairingScreen> {
   void initState() {
     super.initState();
     ApiClient.getServerUrl().then((url) {
-      _serverUrlController.text = url;
+      if (mounted && url.isNotEmpty) {
+        _serverUrlController.text = url;
+      }
+    });
+    ApiClient.getPairingCode().then((code) {
+      if (mounted && code != null && code.isNotEmpty) {
+        _tokenController.text = code;
+      }
     });
   }
 
@@ -32,13 +39,13 @@ class _PairingScreenState extends State<PairingScreen> {
   }
 
   Future<void> _handlePair() async {
-    final token = _tokenController.text.trim();
+    final inputCode = _tokenController.text.trim();
     final url = _serverUrlController.text.trim();
     final name = _deviceNameController.text.trim();
 
-    if (token.isEmpty || url.isEmpty) {
+    if (inputCode.isEmpty || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter Device Token and Server URL')),
+        const SnackBar(content: Text('Please enter Pairing ID / Code and Server URL')),
       );
       return;
     }
@@ -46,17 +53,24 @@ class _PairingScreenState extends State<PairingScreen> {
     setState(() => _isLoading = true);
     await ApiClient.setServerUrl(url);
     final success = await ApiClient.pairDevice(
-      deviceToken: token,
-      deviceName: name,
+      pairingCodeOrToken: inputCode,
+      deviceName: name.isEmpty ? 'Android SMS Gateway' : name,
+      serverUrl: url,
     );
     setState(() => _isLoading = false);
 
     if (success && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('✅ Successfully paired with PayVia Gateway!'),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
       Navigator.pop(context, true);
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Pairing failed. Verify token or server URL.'),
+        SnackBar(
+          content: Text('Pairing failed for "$inputCode". Verify Pairing ID or Server IP.'),
           backgroundColor: Colors.redAccent,
         ),
       );
@@ -69,8 +83,9 @@ class _PairingScreenState extends State<PairingScreen> {
       backgroundColor: const Color(0xFF090D16),
       appBar: AppBar(
         backgroundColor: const Color(0xFF111827),
+        elevation: 0,
         title: Text(
-          'Pair with Gateway',
+          'Pair Device with Gateway',
           style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.bold),
         ),
       ),
@@ -79,68 +94,192 @@ class _PairingScreenState extends State<PairingScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Icon(Icons.qr_code_scanner, size: 64, color: Colors.indigoAccent),
-            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.indigo.shade900.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.indigo.shade500.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.qr_code_2_rounded, size: 40, color: Colors.indigoAccent),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Connect via Pairing ID / Code',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        const Text(
+                          'Find your Pairing Code (e.g. PAIR-8892) on the Web Dashboard under "Android SMS Gateway".',
+                          style: TextStyle(color: Colors.white60, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Server URL Section
             Text(
-              'Enter Pairing Details',
-              textAlign: TextAlign.center,
-              style: GoogleFonts.spaceGrotesk(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              'Gateway Server IP / URL',
+              style: GoogleFonts.spaceGrotesk(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Obtain your Device Token from the web dashboard under "Android SMS Gateway" → "Pair New Android Phone".',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white60, fontSize: 12),
-            ),
-            const SizedBox(height: 24),
             TextField(
               controller: _serverUrlController,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              decoration: InputDecoration(
-                labelText: 'Gateway Server URL',
-                labelStyle: const TextStyle(color: Colors.white60),
-                filled: true,
-                fillColor: const Color(0xFF111827),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _tokenController,
               style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
-                labelText: 'Device Token (e.g. dev_tok_...)',
-                labelStyle: const TextStyle(color: Colors.white60),
+                prefixIcon: const Icon(Icons.link, color: Colors.indigoAccent, size: 20),
+                hintText: 'http://192.168.1.9:5001',
+                hintStyle: const TextStyle(color: Colors.white30),
                 filled: true,
                 fillColor: const Color(0xFF111827),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.indigoAccent),
+                ),
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            // Quick IP selector pills
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _buildIpChip('192.168.1.9 (Wi-Fi)', 'http://192.168.1.9:5001'),
+                _buildIpChip('localhost', 'http://localhost:5001'),
+                _buildIpChip('10.0.2.2 (Emulator)', 'http://10.0.2.2:5001'),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            // Pairing ID / Code
+            Text(
+              'Pairing ID / Code or Device Token',
+              style: GoogleFonts.spaceGrotesk(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _tokenController,
+              textCapitalization: TextCapitalization.characters,
+              style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.pin_rounded, color: Colors.amberAccent, size: 20),
+                hintText: 'e.g. PAIR-8892 or dev_tok_...',
+                hintStyle: const TextStyle(color: Colors.white30),
+                filled: true,
+                fillColor: const Color(0xFF111827),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.indigoAccent),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Device Name
+            Text(
+              'Device Nickname',
+              style: GoogleFonts.spaceGrotesk(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _deviceNameController,
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
-                labelText: 'Device Nickname',
-                labelStyle: const TextStyle(color: Colors.white60),
+                prefixIcon: const Icon(Icons.smartphone, color: Colors.tealAccent, size: 20),
+                hintText: 'e.g. Samsung Gateway / OnePlus 11',
+                hintStyle: const TextStyle(color: Colors.white30),
                 filled: true,
                 fillColor: const Color(0xFF111827),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.white12),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Colors.indigoAccent),
+                ),
               ),
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
+
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.indigo.shade600,
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                backgroundColor: const Color(0xFF4F46E5),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 4,
               ),
               onPressed: _isLoading ? null : _handlePair,
               child: _isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('Connect & Activate Gateway', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                    )
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.link, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Connect & Sync Gateway',
+                          style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                      ],
+                    ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIpChip(String label, String url) {
+    final isSelected = _serverUrlController.text == url;
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _serverUrlController.text = url;
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.indigo.shade600 : Colors.white.withOpacity(0.06),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? Colors.indigoAccent : Colors.white12,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: isSelected ? Colors.white : Colors.white70,
+            fontSize: 10,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          ),
         ),
       ),
     );

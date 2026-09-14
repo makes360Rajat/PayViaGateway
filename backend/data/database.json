@@ -97,8 +97,8 @@
       "status": "ACTIVE",
       "startsAt": "2026-09-11T10:30:40.138Z",
       "expiresAt": "2026-11-10T10:30:40.138Z",
-      "ordersToday": 16,
-      "lastResetDate": "2026-09-11"
+      "ordersToday": 2,
+      "lastResetDate": "2026-09-14"
     }
   ],
   "merchants": [
@@ -139,7 +139,7 @@
       "smsCount": 28,
       "createdAt": "2026-09-11T10:30:40.138Z",
       "updatedAt": "2026-09-11T10:30:40.138Z",
-      "lastUsedAt": "2026-09-11T10:56:35.158Z"
+      "lastUsedAt": "2026-09-14T12:24:30.183Z"
     },
     {
       "id": "m_fampay_01",
@@ -158,24 +158,8 @@
       },
       "smsCount": 15,
       "createdAt": "2026-09-11T10:30:40.138Z",
-      "updatedAt": "2026-09-11T10:30:40.138Z"
-    },
-    {
-      "id": "m_custom_upi_01",
-      "tenantId": "tenant_pankaj_007",
-      "provider": "CUSTOM_UPI",
-      "label": "ICICI Current Account UPI",
-      "upiId": "pankajenterprises@icici",
-      "displayName": "Pankaj Enterprises UPI",
-      "weight": 2,
-      "status": "ACTIVE",
-      "intentEnabled": true,
-      "credentials": {
-        "devicePaired": true
-      },
-      "smsCount": 89,
-      "createdAt": "2026-09-11T10:30:40.138Z",
-      "updatedAt": "2026-09-11T10:30:40.138Z"
+      "updatedAt": "2026-09-11T10:30:40.138Z",
+      "lastUsedAt": "2026-09-14T12:24:02.209Z"
     },
     {
       "id": "m_crypto_01",
@@ -206,32 +190,81 @@
       "createdAt": "2026-09-11T10:30:40.138Z",
       "updatedAt": "2026-09-11T10:30:40.138Z",
       "lastUsedAt": "2026-09-11T10:30:57.689Z"
+    },
+    {
+      "id": "m_8fdca733",
+      "tenantId": "tenant_pankaj_007",
+      "provider": "CUSTOM_UPI",
+      "label": "rajatk",
+      "upiId": "rajat057k@okicici",
+      "displayName": "rajat",
+      "weight": 1,
+      "status": "ACTIVE",
+      "intentEnabled": true,
+      "credentials": {
+        "mid": "",
+        "merchantKey": "whsec_991823719283719283",
+        "mobile": ""
+      },
+      "smsCount": 0,
+      "createdAt": "2026-09-14T11:13:09.672Z",
+      "updatedAt": "2026-09-14T11:13:09.672Z"
     }
   ],
   "devices": [
     {
       "id": "dev_001",
       "tenantId": "tenant_pankaj_007",
-      "deviceName": "OnePlus 11 5G (SIM Gateway 1)",
+      "deviceName": "OnePlus 11 5G Gateway",
       "deviceToken": "dev_tok_991823abce1283",
       "pairingCode": "PAIR-8892",
       "simSlots": [
         {
           "slot": 1,
-          "operator": "Jio 5G",
-          "number": "+91 98765 43210"
-        },
-        {
-          "slot": 2,
-          "operator": "Airtel 4G",
-          "number": "+91 98123 45678"
+          "operator": "SIM 1"
         }
       ],
-      "batteryLevel": 94,
+      "batteryLevel": 92,
       "isOnline": true,
-      "lastHeartbeatAt": "2026-09-11T10:30:40.138Z",
-      "smsCapturedCount": 142,
+      "lastHeartbeatAt": "2026-09-14T12:50:52.096Z",
+      "smsCapturedCount": 143,
       "createdAt": "2026-09-11T10:30:40.138Z"
+    },
+    {
+      "id": "dev_a9ed7684",
+      "tenantId": "tenant_pankaj_007",
+      "deviceName": "OnePlus 11 (Connected SMS Gateway)",
+      "deviceToken": "dev_tok_2d9cff5ec5f5446186b19eb2d864f5a3",
+      "pairingCode": "PAIR-4852",
+      "simSlots": [
+        {
+          "slot": 1,
+          "operator": "SIM 1"
+        }
+      ],
+      "batteryLevel": 100,
+      "isOnline": true,
+      "lastHeartbeatAt": "2026-09-14T12:24:30.199Z",
+      "smsCapturedCount": 2,
+      "createdAt": "2026-09-14T12:19:12.835Z"
+    },
+    {
+      "id": "dev_71e0bec3",
+      "tenantId": "tenant_pankaj_007",
+      "deviceName": "Android SMS Gateway Phone1",
+      "deviceToken": "dev_tok_ff4decb12b3e4805ab7100283ae81555",
+      "pairingCode": "PAIR-4401",
+      "simSlots": [
+        {
+          "slot": 1,
+          "operator": "Primary SIM 5G"
+        }
+      ],
+      "batteryLevel": 92,
+      "isOnline": true,
+      "lastHeartbeatAt": "2026-09-14T12:51:02.240Z",
+      "smsCapturedCount": 1,
+      "createdAt": "2026-09-14T12:44:07.651Z"
     }
   ],
   "apiKeys": [
@@ -248,7 +281,7 @@
       "webhookSecret": "whsec_991823719283719283",
       "isActive": true,
       "createdAt": "2026-09-11T10:30:40.201Z",
-      "lastUsedAt": "2026-09-11T10:57:01.935Z"
+      "lastUsedAt": "2026-09-14T12:24:30.302Z"
     }
   ],
   "orders": [
@@ -376,6 +409,94 @@
         "matchedBy": "UTR_MANUAL_SUBMISSION",
         "submittedAt": "2026-09-11T10:56:50.622Z"
       }
+    },
+    {
+      "id": "ord_6eea6c85",
+      "orderId": "BYTE17893787218574842",
+      "tenantId": "tenant_pankaj_007",
+      "merchantAccountId": "m_bharatpe_01",
+      "merchantAccountLabel": "BharatPe Merchant QR",
+      "provider": "BHARATPE",
+      "amount": 2,
+      "currency": "INR",
+      "customerMobile": "9132103210",
+      "remark1": "test",
+      "template": "template_6",
+      "linkToken": "34d3015070014ef7",
+      "paymentUrl": "http://localhost:5173/pay/34d3015070014ef7",
+      "status": "EXPIRED",
+      "expiresAt": "2026-09-14T09:48:41.857Z",
+      "createdAt": "2026-09-14T09:38:41.857Z",
+      "updatedAt": "2026-09-14T09:48:47.482Z"
+    },
+    {
+      "id": "ord_6f4d49fa",
+      "orderId": "BYTE17893871302445731",
+      "tenantId": "tenant_pankaj_007",
+      "merchantAccountId": "m_8fdca733",
+      "merchantAccountLabel": "rajatk",
+      "provider": "CUSTOM_UPI",
+      "amount": 1.6,
+      "currency": "INR",
+      "customerMobile": "7696344830",
+      "customerName": "socialK",
+      "remark1": "Order11223366",
+      "template": "template_1",
+      "linkToken": "0da149eb66054ccd",
+      "paymentUrl": "http://localhost:5173/pay/0da149eb66054ccd",
+      "status": "EXPIRED",
+      "expiresAt": "2026-09-14T12:08:50.244Z",
+      "createdAt": "2026-09-14T11:58:50.245Z",
+      "updatedAt": "2026-09-14T12:08:56.017Z"
+    },
+    {
+      "id": "ord_539992da",
+      "orderId": "BYTE17893871302763741",
+      "tenantId": "tenant_pankaj_007",
+      "merchantAccountId": "m_8fdca733",
+      "merchantAccountLabel": "rajatk",
+      "provider": "CUSTOM_UPI",
+      "amount": 1.6,
+      "currency": "INR",
+      "customerMobile": "7696344830",
+      "customerName": "socialK",
+      "remark1": "Order11223366",
+      "template": "template_1",
+      "linkToken": "cfb3570f2fa54a94",
+      "paymentUrl": "http://localhost:5173/pay/cfb3570f2fa54a94",
+      "status": "EXPIRED",
+      "expiresAt": "2026-09-14T12:08:50.276Z",
+      "createdAt": "2026-09-14T11:58:50.276Z",
+      "updatedAt": "2026-09-14T12:08:55.272Z"
+    },
+    {
+      "id": "ord_6e580d66",
+      "orderId": "BYTE17893886701834801",
+      "tenantId": "tenant_pankaj_007",
+      "apiKeyId": "key_001",
+      "merchantAccountId": "m_bharatpe_01",
+      "merchantAccountLabel": "BharatPe Merchant QR",
+      "provider": "BHARATPE",
+      "amount": 1,
+      "currency": "INR",
+      "customerName": "Test Payer",
+      "remark1": "Live Test Order",
+      "template": "template_1",
+      "linkToken": "92ab23388bce412b",
+      "paymentUrl": "http://localhost:5173/pay/92ab23388bce412b",
+      "status": "TXN_SUCCESS",
+      "expiresAt": "2026-09-14T12:34:30.183Z",
+      "createdAt": "2026-09-14T12:24:30.184Z",
+      "updatedAt": "2026-09-14T12:24:30.199Z",
+      "utr": "419827391823",
+      "paidAt": "2026-09-14T12:24:30.199Z",
+      "rawVerificationData": {
+        "matchedBy": "SMS_GATEWAY",
+        "deviceId": "dev_a9ed7684",
+        "sender": "AD-HDFCBK",
+        "bank": "Generic Indian Bank UPI Pattern",
+        "capturedAt": "2026-09-14T12:24:30.199Z"
+      }
     }
   ],
   "webhookLogs": [
@@ -444,9 +565,79 @@
       "createdAt": "2026-09-11T10:56:50.622Z",
       "responseCode": 404,
       "responseBody": "{\"success\":false,\"error\":{\"message\":\"Token \\\"demo-payment-callback\\\" not found\",\"id\":\"\"}}"
+    },
+    {
+      "id": "wh_70f5d231",
+      "orderId": "ord_6e580d66",
+      "tenantId": "tenant_pankaj_007",
+      "targetUrl": "https://webhook.site/demo-payment-callback",
+      "payload": {
+        "event": "payment.success",
+        "order_id": "BYTE17893886701834801",
+        "amount": 1,
+        "currency": "INR",
+        "status": "TXN_SUCCESS",
+        "utr": "419827391823",
+        "gateway_txn": null,
+        "provider": "BHARATPE",
+        "paid_at": "2026-09-14T12:24:30.199Z",
+        "remark1": "Live Test Order",
+        "created_at": "2026-09-14T12:24:30.184Z"
+      },
+      "attemptCount": 1,
+      "status": "FAILED",
+      "createdAt": "2026-09-14T12:24:30.200Z",
+      "responseCode": 404,
+      "responseBody": "{\"success\":false,\"error\":{\"message\":\"Token \\\"demo-payment-callback\\\" not found\",\"id\":\"\"}}"
     }
   ],
-  "smsLogs": [],
+  "smsLogs": [
+    {
+      "id": "sms_5d026daa",
+      "deviceId": "dev_001",
+      "tenantId": "tenant_pankaj_007",
+      "sender": "AD-HDFCBK",
+      "message": "Dear Customer, your A/c credited with Rs 1.00 on 14-SEP-26 by UPI/419827391823/Ref No.",
+      "parsedAmount": 1,
+      "parsedUtr": "419827391823",
+      "status": "UNMATCHED",
+      "receivedAt": "2026-09-14T11:53:16.271Z"
+    },
+    {
+      "id": "sms_ff951cd2",
+      "deviceId": "dev_a9ed7684",
+      "tenantId": "tenant_pankaj_007",
+      "sender": "AD-HDFCBK",
+      "message": "Dear Customer, your A/c credited with Rs 1.00 on 14-SEP-26 by UPI/419827391823/Ref No.",
+      "parsedAmount": 1,
+      "parsedUtr": "419827391823",
+      "status": "UNMATCHED",
+      "receivedAt": "2026-09-14T12:24:02.230Z"
+    },
+    {
+      "id": "sms_d807baf6",
+      "deviceId": "dev_a9ed7684",
+      "tenantId": "tenant_pankaj_007",
+      "sender": "AD-HDFCBK",
+      "message": "Dear Customer, your A/c credited with Rs 1.00 on 14-SEP-26 by UPI/419827391823/Ref No.",
+      "parsedAmount": 1,
+      "parsedUtr": "419827391823",
+      "status": "PROCESSED",
+      "receivedAt": "2026-09-14T12:24:30.199Z",
+      "matchedOrderId": "BYTE17893886701834801"
+    },
+    {
+      "id": "sms_e5919a1d",
+      "deviceId": "dev_71e0bec3",
+      "tenantId": "tenant_pankaj_007",
+      "sender": "AD-HDFCBK",
+      "message": "Dear Customer, your A/c credited with Rs 499.00 on 11-SEP-26 by UPI/419827391823/Ref No.",
+      "parsedAmount": 499,
+      "parsedUtr": "419827391823",
+      "status": "UNMATCHED",
+      "receivedAt": "2026-09-14T12:46:36.796Z"
+    }
+  ],
   "templateSettings": [
     {
       "tenantId": "tenant_pankaj_007",

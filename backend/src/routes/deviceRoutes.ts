@@ -37,14 +37,25 @@ router.post('/generate-pairing', authenticateToken, (req: AuthenticatedRequest, 
   db.devices.push(pendingDevice);
   db.save();
 
+  const originHeader = req.headers['origin'] || req.headers['referer'];
+  let dynamicServerUrl = 'http://192.168.1.9:5001';
+  if (originHeader) {
+    try {
+      const parsed = new URL(originHeader as string);
+      dynamicServerUrl = `${parsed.protocol}//${parsed.hostname}:5001`;
+    } catch (e) {}
+  }
+
   return res.json({
     status: true,
     data: {
       pairingCode,
       deviceToken,
+      serverUrl: dynamicServerUrl,
       qrData: JSON.stringify({
-        serverUrl: process.env.BASE_URL || 'http://localhost:5000',
+        serverUrl: dynamicServerUrl,
         deviceToken,
+        pairingCode,
         tenantId
       })
     }
@@ -67,19 +78,26 @@ router.delete('/:id', authenticateToken, (req: AuthenticatedRequest, res: Respon
   return res.json({ status: true, message: 'Device disconnected successfully' });
 });
 
-// === MOBILE APP COMPANION ENDPOINTS (Authenticated via deviceToken) ===
+// === MOBILE APP COMPANION ENDPOINTS (Authenticated via deviceToken or pairingCode) ===
 
 // Device Complete Pairing from Mobile App
 router.post('/pair', async (req: Request, res: Response) => {
-  const { deviceToken, deviceName, simSlots, batteryLevel } = req.body;
+  const { deviceToken, pairingCode, pairingId, deviceName, simSlots, batteryLevel } = req.body;
 
-  if (!deviceToken) {
-    return res.status(400).json({ status: false, error: 'Device token is required' });
+  const rawInput = (pairingCode || pairingId || deviceToken || '').trim();
+  if (!rawInput) {
+    return res.status(400).json({ status: false, error: 'Pairing Code or Device Token is required' });
   }
 
-  const device = db.devices.find(d => d.deviceToken === deviceToken);
+  const upperCode = rawInput.toUpperCase();
+  const device = db.devices.find(d => 
+    (d.pairingCode && (d.pairingCode.toUpperCase() === upperCode || d.pairingCode.toUpperCase() === `PAIR-${upperCode}`)) ||
+    (d.deviceToken && d.deviceToken === rawInput) ||
+    d.id === rawInput
+  );
+
   if (!device) {
-    return res.status(404).json({ status: false, error: 'Invalid or expired pairing token' });
+    return res.status(404).json({ status: false, error: `Invalid or expired Pairing Code: "${rawInput}"` });
   }
 
   device.deviceName = deviceName || 'Android Gateway Phone';
@@ -94,6 +112,8 @@ router.post('/pair', async (req: Request, res: Response) => {
     message: 'Device successfully paired and activated as SMS Gateway',
     data: {
       deviceId: device.id,
+      deviceToken: device.deviceToken,
+      pairingCode: device.pairingCode,
       tenantId: device.tenantId
     }
   });

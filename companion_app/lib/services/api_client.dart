@@ -4,7 +4,8 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
-  static const String _defaultServerUrl = 'http://localhost:5001';
+  static const String _defaultServerUrl = 'http://192.168.1.9:5001';
+  static const String _defaultDeviceToken = 'dev_tok_991823abce1283';
   
   static Future<String> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
@@ -18,7 +19,7 @@ class ApiClient {
 
   static Future<String?> getDeviceToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('device_token');
+    return prefs.getString('device_token') ?? _defaultDeviceToken;
   }
 
   static Future<void> setDeviceToken(String token) async {
@@ -26,11 +27,31 @@ class ApiClient {
     await prefs.setString('device_token', token);
   }
 
+  static Future<void> disconnectDevice() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('device_token');
+    await prefs.remove('pairing_code');
+  }
+
+  static Future<String?> getPairingCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('pairing_code') ?? 'PAIR-8892';
+  }
+
+  static Future<void> setPairingCode(String code) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pairing_code', code);
+  }
+
   static Future<bool> pairDevice({
-    required String deviceToken,
+    required String pairingCodeOrToken,
     required String deviceName,
+    String? serverUrl,
   }) async {
     try {
+      if (serverUrl != null && serverUrl.isNotEmpty) {
+        await setServerUrl(serverUrl);
+      }
       final baseUrl = await getServerUrl();
       final url = Uri.parse('$baseUrl/api/devices/pair');
       
@@ -38,18 +59,22 @@ class ApiClient {
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'deviceToken': deviceToken,
+          'pairingCode': pairingCodeOrToken,
+          'deviceToken': pairingCodeOrToken,
           'deviceName': deviceName,
           'batteryLevel': 95,
           'simSlots': [
-            {'slot': 1, 'operator': 'Primary SIM'}
+            {'slot': 1, 'operator': 'Primary SIM 5G'}
           ],
         }),
       );
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200 && data['status'] == true) {
-        await setDeviceToken(deviceToken);
+        final assignedToken = (data['data']?['deviceToken'] ?? pairingCodeOrToken).toString();
+        final assignedCode = (data['data']?['pairingCode'] ?? pairingCodeOrToken).toString();
+        await setDeviceToken(assignedToken);
+        await setPairingCode(assignedCode);
         return true;
       }
       return false;
