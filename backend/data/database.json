@@ -1,0 +1,472 @@
+{
+  "tenants": [
+    {
+      "id": "tenant_admin_001",
+      "name": "Super Administrator",
+      "email": "admin@payvia.vip",
+      "passwordHash": "$2a$10$feR16cL3D.mgDlwUpG8VbuarVK.75j6fewQKeaoyCHGjGhL5y296S",
+      "role": "SUPER_ADMIN",
+      "businessName": "PayVia Official Platform",
+      "planId": "plan_unlimited",
+      "isActive": true,
+      "createdAt": "2026-09-11T10:30:40.136Z",
+      "updatedAt": "2026-09-11T10:30:40.138Z"
+    },
+    {
+      "id": "tenant_pankaj_007",
+      "name": "Pankaj Sharma",
+      "email": "pankajpanks007@gmail.com",
+      "passwordHash": "$2a$10$feR16cL3D.mgDlwUpG8VbuNSqjYA3wQQm2zmUCAx.gNYLryTjrzqq",
+      "role": "MERCHANT",
+      "businessName": "Pankaj Enterprises & Tech",
+      "phone": "+919876543210",
+      "planId": "plan_pro",
+      "isActive": true,
+      "createdAt": "2026-09-11T10:30:40.138Z",
+      "updatedAt": "2026-09-11T10:30:40.138Z"
+    }
+  ],
+  "plans": [
+    {
+      "id": "plan_starter",
+      "name": "Starter",
+      "price": 999,
+      "validityDays": 30,
+      "maxMerchantAccounts": 2,
+      "maxOrdersPerDay": 100,
+      "maxApiKeys": 2,
+      "features": {
+        "webhooks": true,
+        "smsGateway": true,
+        "crypto": false,
+        "prioritySupport": false,
+        "customBranding": false
+      },
+      "isActive": true
+    },
+    {
+      "id": "plan_pro",
+      "name": "Pro",
+      "price": 2499,
+      "validityDays": 30,
+      "maxMerchantAccounts": 10,
+      "maxOrdersPerDay": 2000,
+      "maxApiKeys": 10,
+      "features": {
+        "webhooks": true,
+        "smsGateway": true,
+        "crypto": true,
+        "prioritySupport": true,
+        "customBranding": true
+      },
+      "isActive": true
+    },
+    {
+      "id": "plan_unlimited",
+      "name": "Enterprise VIP",
+      "price": 5999,
+      "validityDays": 90,
+      "maxMerchantAccounts": 50,
+      "maxOrdersPerDay": 50000,
+      "maxApiKeys": 50,
+      "features": {
+        "webhooks": true,
+        "smsGateway": true,
+        "crypto": true,
+        "prioritySupport": true,
+        "customBranding": true
+      },
+      "isActive": true
+    }
+  ],
+  "subscriptions": [
+    {
+      "id": "sub_admin_001",
+      "tenantId": "tenant_admin_001",
+      "planId": "plan_unlimited",
+      "status": "ACTIVE",
+      "startsAt": "2026-09-11T10:30:40.138Z",
+      "expiresAt": "2027-09-11T10:30:40.138Z",
+      "ordersToday": 0,
+      "lastResetDate": "2026-09-11"
+    },
+    {
+      "id": "sub_pankaj_001",
+      "tenantId": "tenant_pankaj_007",
+      "planId": "plan_pro",
+      "status": "ACTIVE",
+      "startsAt": "2026-09-11T10:30:40.138Z",
+      "expiresAt": "2026-11-10T10:30:40.138Z",
+      "ordersToday": 16,
+      "lastResetDate": "2026-09-11"
+    }
+  ],
+  "merchants": [
+    {
+      "id": "m_paytm_01",
+      "tenantId": "tenant_pankaj_007",
+      "provider": "PAYTM",
+      "label": "Main Store Paytm",
+      "upiId": "pankajshop@paytm",
+      "displayName": "Pankaj Store",
+      "weight": 3,
+      "status": "ACTIVE",
+      "intentEnabled": true,
+      "credentials": {
+        "mid": "PANKAJ982348123982",
+        "merchantKey": "AbCdEf123456KeyXYZ",
+        "subAccountId": "sub_001"
+      },
+      "smsCount": 42,
+      "createdAt": "2026-09-11T10:30:40.138Z",
+      "updatedAt": "2026-09-11T10:30:40.138Z"
+    },
+    {
+      "id": "m_bharatpe_01",
+      "tenantId": "tenant_pankaj_007",
+      "provider": "BHARATPE",
+      "label": "BharatPe Merchant QR",
+      "upiId": "pankajretail@yesbankltd",
+      "displayName": "Pankaj Retail QR",
+      "weight": 2,
+      "status": "ACTIVE",
+      "intentEnabled": true,
+      "credentials": {
+        "mobile": "9876543210",
+        "merchantId": "BP_7812903",
+        "token": "bp_session_token_live"
+      },
+      "smsCount": 28,
+      "createdAt": "2026-09-11T10:30:40.138Z",
+      "updatedAt": "2026-09-11T10:30:40.138Z",
+      "lastUsedAt": "2026-09-11T10:56:35.158Z"
+    },
+    {
+      "id": "m_fampay_01",
+      "tenantId": "tenant_pankaj_007",
+      "provider": "FAMPAY",
+      "label": "FamPay Fast Pay",
+      "upiId": "pankaj007@fam",
+      "displayName": "Pankaj FamPay",
+      "weight": 1,
+      "status": "ACTIVE",
+      "intentEnabled": true,
+      "gmailConnected": true,
+      "gmailEmail": "pankajpanks007@gmail.com",
+      "credentials": {
+        "oauthToken": "oauth_gmail_token_valid"
+      },
+      "smsCount": 15,
+      "createdAt": "2026-09-11T10:30:40.138Z",
+      "updatedAt": "2026-09-11T10:30:40.138Z"
+    },
+    {
+      "id": "m_custom_upi_01",
+      "tenantId": "tenant_pankaj_007",
+      "provider": "CUSTOM_UPI",
+      "label": "ICICI Current Account UPI",
+      "upiId": "pankajenterprises@icici",
+      "displayName": "Pankaj Enterprises UPI",
+      "weight": 2,
+      "status": "ACTIVE",
+      "intentEnabled": true,
+      "credentials": {
+        "devicePaired": true
+      },
+      "smsCount": 89,
+      "createdAt": "2026-09-11T10:30:40.138Z",
+      "updatedAt": "2026-09-11T10:30:40.138Z"
+    },
+    {
+      "id": "m_crypto_01",
+      "tenantId": "tenant_pankaj_007",
+      "provider": "CRYPTO",
+      "label": "USDT / USDC Multi-Chain",
+      "upiId": "crypto-wallet",
+      "displayName": "Crypto Vault",
+      "weight": 1,
+      "status": "ACTIVE",
+      "intentEnabled": false,
+      "credentials": {
+        "networks": [
+          {
+            "chain": "TRC20",
+            "address": "TX9Q8yJz42mN8K9vP2bQw5R1t7YmU3x8Zb"
+          },
+          {
+            "chain": "POLYGON",
+            "address": "0x71C2a8B998E1f0E389aDe1b9319B1484C3F6e9A0"
+          },
+          {
+            "chain": "BSC",
+            "address": "0x71C2a8B998E1f0E389aDe1b9319B1484C3F6e9A0"
+          }
+        ]
+      },
+      "createdAt": "2026-09-11T10:30:40.138Z",
+      "updatedAt": "2026-09-11T10:30:40.138Z",
+      "lastUsedAt": "2026-09-11T10:30:57.689Z"
+    }
+  ],
+  "devices": [
+    {
+      "id": "dev_001",
+      "tenantId": "tenant_pankaj_007",
+      "deviceName": "OnePlus 11 5G (SIM Gateway 1)",
+      "deviceToken": "dev_tok_991823abce1283",
+      "pairingCode": "PAIR-8892",
+      "simSlots": [
+        {
+          "slot": 1,
+          "operator": "Jio 5G",
+          "number": "+91 98765 43210"
+        },
+        {
+          "slot": 2,
+          "operator": "Airtel 4G",
+          "number": "+91 98123 45678"
+        }
+      ],
+      "batteryLevel": 94,
+      "isOnline": true,
+      "lastHeartbeatAt": "2026-09-11T10:30:40.138Z",
+      "smsCapturedCount": 142,
+      "createdAt": "2026-09-11T10:30:40.138Z"
+    }
+  ],
+  "apiKeys": [
+    {
+      "id": "key_001",
+      "tenantId": "tenant_pankaj_007",
+      "name": "Production Web App Key",
+      "keyPrefix": "pv_live_78a3",
+      "rawKey": "pv_live_78a398115aba4bc19da3eeb1aeabb8e9",
+      "keyHash": "$2a$10$wYUqAQ5nfi3WRUAAF2agp.eJC.XcoFRbIwyAT6XYeB2vABsuuIy3O",
+      "scope": "ALL",
+      "pinnedTemplate": "template_1",
+      "webhookUrl": "https://webhook.site/demo-payment-callback",
+      "webhookSecret": "whsec_991823719283719283",
+      "isActive": true,
+      "createdAt": "2026-09-11T10:30:40.201Z",
+      "lastUsedAt": "2026-09-11T10:57:01.935Z"
+    }
+  ],
+  "orders": [
+    {
+      "id": "ord_sample_01",
+      "orderId": "PV891273910283",
+      "tenantId": "tenant_pankaj_007",
+      "apiKeyId": "key_001",
+      "merchantAccountId": "m_paytm_01",
+      "merchantAccountLabel": "Main Store Paytm",
+      "provider": "PAYTM",
+      "amount": 499,
+      "currency": "INR",
+      "customerMobile": "9876543210",
+      "customerName": "Aarav Gupta",
+      "customerEmail": "aarav@gmail.com",
+      "remark1": "Invoice #1042",
+      "returnUrl": "https://merchant.example.com/checkout/success",
+      "template": "template_1",
+      "linkToken": "token_sample_abc123",
+      "paymentUrl": "http://localhost:3000/pay/token_sample_abc123",
+      "status": "TXN_SUCCESS",
+      "utr": "419827391823",
+      "gatewayTxnId": "PAYTM2026091109123812",
+      "paidAt": "2026-09-11T09:30:40.201Z",
+      "expiresAt": "2026-09-11T10:40:40.201Z",
+      "createdAt": "2026-09-11T09:25:40.201Z",
+      "updatedAt": "2026-09-11T09:30:40.201Z"
+    },
+    {
+      "id": "ord_sample_02",
+      "orderId": "PV891273910284",
+      "tenantId": "tenant_pankaj_007",
+      "apiKeyId": "key_001",
+      "merchantAccountId": "m_bharatpe_01",
+      "merchantAccountLabel": "BharatPe Merchant QR",
+      "provider": "BHARATPE",
+      "amount": 1499.5,
+      "currency": "INR",
+      "customerMobile": "9812345678",
+      "customerName": "Pooja Verma",
+      "remark1": "Annual Pro Subscription",
+      "returnUrl": "https://merchant.example.com/checkout/success",
+      "template": "template_4",
+      "linkToken": "token_sample_def456",
+      "paymentUrl": "http://localhost:3000/pay/token_sample_def456",
+      "status": "TXN_SUCCESS",
+      "utr": "419827391899",
+      "gatewayTxnId": "BP_TXN_9981273",
+      "paidAt": "2026-09-11T08:30:40.201Z",
+      "expiresAt": "2026-09-11T10:40:40.201Z",
+      "createdAt": "2026-09-11T08:25:40.201Z",
+      "updatedAt": "2026-09-11T08:30:40.201Z"
+    },
+    {
+      "id": "ord_sample_03",
+      "orderId": "PV891273910285",
+      "tenantId": "tenant_pankaj_007",
+      "apiKeyId": "key_001",
+      "merchantAccountId": "m_custom_upi_01",
+      "merchantAccountLabel": "ICICI Current Account UPI",
+      "provider": "CUSTOM_UPI",
+      "amount": 250,
+      "currency": "INR",
+      "customerMobile": "9988776655",
+      "customerName": "Vikram Singh",
+      "remark1": "Digital Course Bundle",
+      "template": "template_2",
+      "linkToken": "token_sample_ghi789",
+      "paymentUrl": "http://localhost:3000/pay/token_sample_ghi789",
+      "status": "EXPIRED",
+      "expiresAt": "2026-09-11T10:39:40.201Z",
+      "createdAt": "2026-09-11T10:29:40.201Z",
+      "updatedAt": "2026-09-11T10:39:40.371Z"
+    },
+    {
+      "id": "ord_15ed940f",
+      "orderId": "BYTE17891226576904209",
+      "tenantId": "tenant_pankaj_007",
+      "apiKeyId": "key_001",
+      "merchantAccountId": "m_crypto_01",
+      "merchantAccountLabel": "USDT / USDC Multi-Chain",
+      "provider": "CRYPTO",
+      "amount": 299,
+      "currency": "INR",
+      "customerMobile": "9876543210",
+      "remark1": "Test Order #1",
+      "template": "template_1",
+      "linkToken": "709fe1de7a234a74",
+      "paymentUrl": "http://localhost:5173/pay/709fe1de7a234a74",
+      "status": "TXN_SUCCESS",
+      "expiresAt": "2026-09-11T10:40:57.690Z",
+      "createdAt": "2026-09-11T10:30:57.690Z",
+      "updatedAt": "2026-09-11T10:31:08.809Z",
+      "utr": "419827182938",
+      "paidAt": "2026-09-11T10:31:08.809Z",
+      "rawVerificationData": {
+        "matchedBy": "UTR_MANUAL_SUBMISSION",
+        "submittedAt": "2026-09-11T10:31:08.809Z"
+      }
+    },
+    {
+      "id": "ord_6efdbefb",
+      "orderId": "BYTE17891241951588041",
+      "tenantId": "tenant_pankaj_007",
+      "apiKeyId": "key_001",
+      "merchantAccountId": "m_bharatpe_01",
+      "merchantAccountLabel": "BharatPe Merchant QR",
+      "provider": "BHARATPE",
+      "amount": 799,
+      "currency": "INR",
+      "customerMobile": "9988776655",
+      "customerName": "Deepak Kumar",
+      "remark1": "Pro Plan Renewal",
+      "template": "template_1",
+      "linkToken": "68e1b87918014305",
+      "paymentUrl": "http://localhost:5173/pay/68e1b87918014305",
+      "status": "TXN_SUCCESS",
+      "expiresAt": "2026-09-11T11:06:35.158Z",
+      "createdAt": "2026-09-11T10:56:35.158Z",
+      "updatedAt": "2026-09-11T10:56:50.622Z",
+      "utr": "419827991823",
+      "paidAt": "2026-09-11T10:56:50.622Z",
+      "rawVerificationData": {
+        "matchedBy": "UTR_MANUAL_SUBMISSION",
+        "submittedAt": "2026-09-11T10:56:50.622Z"
+      }
+    }
+  ],
+  "webhookLogs": [
+    {
+      "id": "wh_001",
+      "orderId": "ord_sample_01",
+      "tenantId": "tenant_pankaj_007",
+      "targetUrl": "https://webhook.site/demo-payment-callback",
+      "payload": {
+        "event": "payment.success",
+        "order_id": "PV891273910283",
+        "amount": 499,
+        "status": "TXN_SUCCESS",
+        "utr": "419827391823"
+      },
+      "responseCode": 200,
+      "responseBody": "{\"success\":true}",
+      "attemptCount": 1,
+      "status": "DELIVERED",
+      "createdAt": "2026-09-11T09:30:40.201Z"
+    },
+    {
+      "id": "wh_f58ea00f",
+      "orderId": "ord_15ed940f",
+      "tenantId": "tenant_pankaj_007",
+      "targetUrl": "https://webhook.site/demo-payment-callback",
+      "payload": {
+        "event": "payment.success",
+        "order_id": "BYTE17891226576904209",
+        "amount": 299,
+        "currency": "INR",
+        "status": "TXN_SUCCESS",
+        "utr": "419827182938",
+        "gateway_txn": null,
+        "provider": "CRYPTO",
+        "paid_at": "2026-09-11T10:31:08.809Z",
+        "remark1": "Test Order #1",
+        "created_at": "2026-09-11T10:30:57.690Z"
+      },
+      "attemptCount": 1,
+      "status": "FAILED",
+      "createdAt": "2026-09-11T10:31:08.810Z",
+      "responseCode": 404,
+      "responseBody": "{\"success\":false,\"error\":{\"message\":\"Token \\\"demo-payment-callback\\\" not found\",\"id\":\"\"}}"
+    },
+    {
+      "id": "wh_9e03b76d",
+      "orderId": "ord_6efdbefb",
+      "tenantId": "tenant_pankaj_007",
+      "targetUrl": "https://webhook.site/demo-payment-callback",
+      "payload": {
+        "event": "payment.success",
+        "order_id": "BYTE17891241951588041",
+        "amount": 799,
+        "currency": "INR",
+        "status": "TXN_SUCCESS",
+        "utr": "419827991823",
+        "gateway_txn": null,
+        "provider": "BHARATPE",
+        "paid_at": "2026-09-11T10:56:50.622Z",
+        "remark1": "Pro Plan Renewal",
+        "created_at": "2026-09-11T10:56:35.158Z"
+      },
+      "attemptCount": 1,
+      "status": "FAILED",
+      "createdAt": "2026-09-11T10:56:50.622Z",
+      "responseCode": 404,
+      "responseBody": "{\"success\":false,\"error\":{\"message\":\"Token \\\"demo-payment-callback\\\" not found\",\"id\":\"\"}}"
+    }
+  ],
+  "smsLogs": [],
+  "templateSettings": [
+    {
+      "tenantId": "tenant_pankaj_007",
+      "templateMode": "rotate",
+      "defaultTemplate": "template_1",
+      "enabledTemplates": [
+        "template_1",
+        "template_2",
+        "template_3",
+        "template_4",
+        "template_5",
+        "template_6",
+        "template_7",
+        "template_8",
+        "template_9",
+        "template_10"
+      ],
+      "brandName": "Pankaj Tech Store",
+      "brandColor": "#6366f1",
+      "supportEmail": "support@pankajtech.com"
+    }
+  ]
+}
