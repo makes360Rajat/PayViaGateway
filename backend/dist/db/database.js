@@ -435,7 +435,7 @@ class Database {
         return this.data.orders.find(o => o.id === id);
     }
     findApiKeyByKey(rawKey) {
-        return this.data.apiKeys.find(k => k.isActive && bcryptjs_1.default.compareSync(rawKey, k.keyHash));
+        return this.data.apiKeys.find(k => k.isActive && (k.rawKey === rawKey || (k.keyHash && bcryptjs_1.default.compareSync(rawKey, k.keyHash))));
     }
 }
 exports.db = new Database();

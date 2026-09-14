@@ -11,7 +11,8 @@ import {
   FileCode2,
   ShieldAlert,
   Smartphone,
-  ChevronRight
+  ChevronRight,
+  ShoppingBag
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -24,6 +25,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
 
   const navItems = [
     { id: 'dashboard', label: 'Live Dashboard', icon: LayoutDashboard },
+    { id: 'demo', label: 'Demo Store & API Tester', icon: ShoppingBag, badge: 'Live Test' },
     { id: 'merchants', label: 'Connected Merchants', icon: Wallet, badge: 'Direct' },
     { id: 'orders', label: 'Orders & Settlements', icon: ReceiptText },
     { id: 'create-order', label: 'Create Order Link', icon: PlusCircle },

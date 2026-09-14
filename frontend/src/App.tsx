@@ -16,6 +16,7 @@ import { PlansPricing } from './pages/plans/PlansPricing';
 import { AdminPanel } from './pages/admin/AdminPanel';
 import { ApiDocsPage } from './pages/docs/ApiDocsPage';
 import { HostedCheckout } from './pages/checkout/HostedCheckout';
+import { DemoMerchantApp } from './pages/demo/DemoMerchantApp';
 
 export const MainApp: React.FC = () => {
   const { user, isLoading } = useAuth();
@@ -23,14 +24,17 @@ export const MainApp: React.FC = () => {
   const [previewTemplateId, setPreviewTemplateId] = useState<string>('template_1');
   const [checkoutToken, setCheckoutToken] = useState<string | null>(null);
 
-  // Check URL pathname for /pay/:token or hash routing
+  // Check URL pathname for /pay/:token, /demo or ?page=demo
   useEffect(() => {
     const path = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
     if (path.startsWith('/pay/')) {
       const token = path.replace('/pay/', '').trim();
       if (token) {
         setCheckoutToken(token);
       }
+    } else if (path === '/demo' || params.get('page') === 'demo') {
+      setCurrentPage('demo');
     }
   }, []);
 
@@ -99,6 +103,7 @@ export const MainApp: React.FC = () => {
           {currentPage === 'plans' && <PlansPricing />}
           {currentPage === 'admin' && <AdminPanel />}
           {currentPage === 'docs' && <ApiDocsPage />}
+          {currentPage === 'demo' && <DemoMerchantApp onNavigate={handleNavigate} />}
         </main>
       </div>
     </div>

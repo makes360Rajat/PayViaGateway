@@ -479,7 +479,7 @@ class Database {
   }
 
   public findApiKeyByKey(rawKey: string): ApiKey | undefined {
-    return this.data.apiKeys.find(k => k.isActive && bcrypt.compareSync(rawKey, k.keyHash));
+    return this.data.apiKeys.find(k => k.isActive && (k.rawKey === rawKey || (k.keyHash && bcrypt.compareSync(rawKey, k.keyHash))));
   }
 }
 

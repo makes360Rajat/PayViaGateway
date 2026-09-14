@@ -82,6 +82,24 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
       });
     } catch (e) {}
 
+    // Notify window.opener (if opened via popup) and window.parent (if embedded in iframe/modal)
+    try {
+      const payload = {
+        source: 'payvia',
+        event: 'payment',
+        status: 'TXN_SUCCESS',
+        order_id: orderData.order_id,
+        amount: orderData.amount,
+        utr: orderData.utr
+      };
+      if (window.opener) {
+        window.opener.postMessage(payload, '*');
+      }
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage(payload, '*');
+      }
+    } catch (e) {}
+
     // Auto redirect if return_url exists
     if (orderData.return_url) {
       setTimeout(() => {

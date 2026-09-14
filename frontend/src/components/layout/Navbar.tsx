@@ -40,6 +40,19 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage }) => {
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
+          {/* Demo Sandbox Quick Nav */}
+          <button
+            onClick={() => onNavigate('demo')}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition border ${
+              currentPage === 'demo'
+                ? 'bg-amber-500/20 border-amber-500/40 text-amber-300'
+                : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'
+            }`}
+          >
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+            <span>Demo Store & Sandbox</span>
+          </button>
+
           {user ? (
             <>
               {/* Quick Create Button */}
