@@ -18,20 +18,52 @@ class PayViaNotificationListener : NotificationListenerService() {
     companion object {
         private const val TAG = "PayViaNotifListener"
         
-        // Known UPI and Payment App Package Names
+        // Comprehensive set of Indian UPI Apps, Merchant Soundboxes, Wallets & Banking Apps
         private val TARGET_PACKAGES = setOf(
+            // Primary UPI & Wallets
             "com.google.android.apps.nbu.paisa.user", // Google Pay
-            "com.phonepe.app",                       // PhonePe
-            "net.one97.paytm",                       // Paytm
-            "com.bharatpe.app",                      // BharatPe
-            "in.org.npci.upiapp",                    // BHIM UPI
-            "com.freecharge.android",                // Freecharge
-            "com.cred.android",                      // CRED
+            "com.phonepe.app",                       // PhonePe User
+            "com.phonepe.app.business",              // PhonePe Business / Merchant
+            "net.one97.paytm",                       // Paytm User
+            "com.paytm.business",                    // Paytm for Business / Soundbox
+            "com.bharatpe.app",                      // BharatPe Merchant
             "com.mobikwik_new",                      // MobiKwik
-            "com.msf.kbank.mobile",                  // Kotak
-            "com.icicibank.imobile",                 // iMobile ICICI
-            "com.sbi.upi",                           // SBI Pay
-            "com.axis.mobile"                        // Axis Mobile
+            "com.mobikwik.merchant",                 // MobiKwik Merchant
+            "in.org.npci.upiapp",                    // BHIM NPCI
+            "in.amazon.mShop.android.shopping",      // Amazon Pay
+            "com.amazon.mpay.merchant.android",      // Amazon Pay for Business
+            "com.cred.android",                      // CRED
+            "com.dreamplug.androidapp",              // CRED
+            "com.freecharge.android",                // Freecharge
+            "com.whatsapp",                          // WhatsApp Payments
+            "com.whatsapp.w4b",                      // WhatsApp Business Payments
+            "com.naviapps.mobile",                   // Navi UPI
+            "com.fampay.in",                         // FamPay
+            "com.jupiter.money",                     // Jupiter Money UPI
+            "com.fi.money",                          // Fi Money UPI
+            "com.myairtelapp",                       // Airtel Payments Bank / Thanks
+            "com.tatadigital.tcp",                   // Tata Neu UPI
+
+            // Major Indian Bank Mobile Banking & UPI Apps
+            "com.hdfcbank.payzapp",                  // HDFC PayZapp
+            "com.snapwork.hdfc",                     // HDFC MobileBanking
+            "com.icicibank.imobile",                 // ICICI iMobile Pay
+            "com.icicibank.pockets",                 // ICICI Pockets
+            "com.sbi.upi",                           // SBI BHIM Pay
+            "com.sbi.lotusintouch",                  // YONO SBI
+            "com.axis.mobile",                       // Axis Mobile
+            "com.axis.okaxis",                       // Axis Pay UPI
+            "com.msf.kbank.mobile",                  // Kotak 811
+            "com.bankofbaroda.mconnect",             // bob World
+            "com.pnb.pnbone",                        // PNB ONE
+            "com.canarabank.ai1",                    // Canara ai1
+            "com.unionbank.augmentedbanking",        // Union Bank Vyom
+            "com.indusind.indusmobile",              // IndusInd Mobile
+            "com.idfcfirstbank.optimus",             // IDFC FIRST Bank
+            "com.rblbank.mobank",                    // RBL MoBank
+            "com.yesbank",                           // YES Bank Iris
+            "com.aubank.au0101",                     // AU 0101
+            "com.federalbank.fedmobile"              // Federal Bank FedMobile
         )
     }
 
@@ -39,11 +71,15 @@ class PayViaNotificationListener : NotificationListenerService() {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
 
-        val packageName = sbn.packageName ?: ""
-        val isPaymentApp = TARGET_PACKAGES.contains(packageName) || 
+        val packageName = sbn.packageName?.lowercase() ?: ""
+        val isPaymentApp = TARGET_PACKAGES.contains(sbn.packageName) || 
                           packageName.contains("paisa") || 
                           packageName.contains("pay") || 
-                          packageName.contains("upi")
+                          packageName.contains("upi") ||
+                          packageName.contains("bank") ||
+                          packageName.contains("wallet") ||
+                          packageName.contains("money") ||
+                          packageName.contains("merchant")
 
         if (!isPaymentApp) return
 

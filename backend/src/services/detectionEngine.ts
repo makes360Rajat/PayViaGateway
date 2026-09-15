@@ -83,39 +83,68 @@ export class DetectionEngine {
 
   public static parseNotification(packageName: string, title: string, message: string): { amount?: number; orderId?: string; utr?: string; payerName?: string; provider?: string } {
     const combined = `${title} ${message}`;
+    const pkg = (packageName || '').toLowerCase();
     let provider = 'UPI_APP';
 
-    if (packageName.includes('nbu.paisa') || /gpay|google\s*pay/i.test(combined)) {
+    if (pkg.includes('nbu.paisa') || /gpay|google\s*pay/i.test(combined)) {
       provider = 'GPAY';
-    } else if (packageName.includes('phonepe') || /phonepe/i.test(combined)) {
+    } else if (pkg.includes('phonepe') || /phonepe/i.test(combined)) {
       provider = 'PHONEPE';
-    } else if (packageName.includes('paytm') || /paytm/i.test(combined)) {
+    } else if (pkg.includes('paytm') || /paytm/i.test(combined)) {
       provider = 'PAYTM';
-    } else if (packageName.includes('bharatpe') || /bharatpe/i.test(combined)) {
+    } else if (pkg.includes('bharatpe') || /bharatpe/i.test(combined)) {
       provider = 'BHARATPE';
+    } else if (pkg.includes('mobikwik') || /mobikwik/i.test(combined)) {
+      provider = 'MOBIKWIK';
+    } else if (pkg.includes('amazon') || /amazon\s*pay/i.test(combined)) {
+      provider = 'AMAZONPAY';
+    } else if (pkg.includes('cred') || /cred/i.test(combined)) {
+      provider = 'CRED';
+    } else if (pkg.includes('whatsapp') || /whatsapp/i.test(combined)) {
+      provider = 'WHATSAPP_PAY';
+    } else if (pkg.includes('npci') || /bhim/i.test(combined)) {
+      provider = 'BHIM';
+    } else if (pkg.includes('payzapp') || /payzapp/i.test(combined)) {
+      provider = 'PAYZAPP';
+    } else if (pkg.includes('bank') || /bank|a\/c|account/i.test(combined)) {
+      provider = 'BANK_APP';
     }
 
-    // 1. Direct Order ID Extraction (e.g. BYTE17894501153283049)
+    // 1. Direct Order ID Extraction (e.g. BYTE17894501153283049 or ord_xxx)
     const orderMatch = combined.match(/(BYTE\d{10,24}|ord_[a-zA-Z0-9]+)/i);
     const orderId = orderMatch ? orderMatch[1] : undefined;
 
-    // 2. Amount Extraction (e.g. "RAHUL paid you ₹1.00", "Received ₹1.00", "Rs. 1.00")
-    const amountMatch = combined.match(/(?:paid\s+you|received|deposited|credited|payment\s+of)\s*(?:of|with|by)?\s*(?:₹|Rs\.?|INR)?\s*([\d,]+\.?\d*)/i) ||
-                        combined.match(/(?:₹|Rs\.?|INR)\s*([\d,]+\.?\d*)/i);
+    // 2. Amount Extraction across all Indian payment formats
+    // Examples:
+    // - "RAHUL paid you ₹1.00"
+    // - "Received ₹100.00 from RAHUL"
+    // - "Payment of ₹500 received on PhonePe"
+    // - "Money Received: ₹250.00"
+    // - "Rs. 1,500.00 credited to your account"
+    // - "₹50 received on BharatPe QR"
+    // - "Received Rs.100 from RAHUL via UPI"
+    const amountMatch = 
+      combined.match(/(?:paid\s+you|received|deposited|credited|payment\s+of|money\s+received)\s*(?:of|with|by|for)?\s*(?:₹|Rs\.?|INR)?\s*([\d,]+\.?\d*)/i) ||
+      combined.match(/(?:₹|Rs\.?|INR)\s*([\d,]+\.?\d*)\s*(?:received|credited|deposited|added)/i) ||
+      combined.match(/(?:₹|Rs\.?|INR)\s*([\d,]+\.?\d*)/i);
+
     let amount: number | undefined;
     if (amountMatch) {
       const rawAmount = amountMatch[1].replace(/,/g, '');
       const parsed = parseFloat(rawAmount);
-      if (!isNaN(parsed)) amount = parsed;
+      if (!isNaN(parsed) && parsed > 0) amount = parsed;
     }
 
-    // 3. Payer Name Extraction (e.g. "RAHUL paid you", "received from RAHUL")
-    const payerMatch = title.match(/^([A-Za-z\s]+?)\s+paid\s+you/i) ||
-                       combined.match(/(?:received\s+from|from|by)\s+([A-Za-z\s]+?)(?:\.|\s+via|\s+to|$)/i);
+    // 3. Payer Name Extraction (e.g. "RAHUL paid you", "Received from RAHUL", "by RAHUL")
+    const payerMatch = 
+      title.match(/^([A-Za-z\s]+?)\s+paid\s+you/i) ||
+      combined.match(/(?:received\s+from|from|by|paid\s+by)\s+([A-Za-z\s]+?)(?:\.|\s+via|\s+to|\s+on|\s+for|$)/i);
     const payerName = payerMatch ? payerMatch[1].trim() : undefined;
 
-    // 4. 12-Digit UTR Extraction (if present)
-    const utrMatch = combined.match(/(?:UPI|Ref|UTR|txn(?:\s*id)?)\s*[:\-\/]?\s*(\d{12})/i) || combined.match(/\b(\d{12})\b/);
+    // 4. 12-Digit UTR / Reference Number Extraction
+    const utrMatch = 
+      combined.match(/(?:UPI|Ref|UTR|txn(?:\s*id)?|rrn)\s*[:\-\/]?\s*(\d{12})/i) || 
+      combined.match(/\b(\d{12})\b/);
     const utr = utrMatch ? utrMatch[1] : undefined;
 
     return { amount, orderId, utr, payerName, provider };
