@@ -18,6 +18,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const MethodChannel _notifChannel = MethodChannel('com.payvia.gateway/notifications');
+  static const EventChannel _liveStreamChannel = EventChannel('com.payvia.gateway/live_stream');
 
   bool _isPaired = false;
   String? _deviceToken;
@@ -25,7 +26,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _serverUrl = 'https://payvia360.com';
   bool _isOnline = false;
   bool _isNotifAccessGranted = false;
+  bool _isBatteryOptIgnored = false;
   Timer? _heartbeatTimer;
+  StreamSubscription? _liveStreamSubscription;
   final List<SmsTransaction> _transactions = [];
 
   // Mode: 0 = Bank SMS, 1 = UPI Push Notification (GPay/PhonePe)
@@ -47,13 +50,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _checkPairingStatus();
-    _checkNotificationAccess();
+    _checkPermissions();
+    _initLiveStreamListener();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _checkNotificationAccess();
+      _checkPermissions();
+      _rebindNotificationListener();
     }
   }
 
@@ -61,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _heartbeatTimer?.cancel();
+    _liveStreamSubscription?.cancel();
     _senderController.dispose();
     _messageController.dispose();
     _notifPackageController.dispose();
@@ -69,17 +75,80 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-  Future<void> _checkNotificationAccess() async {
+  void _initLiveStreamListener() {
     try {
-      final bool granted = await _notifChannel.invokeMethod('isNotificationAccessGranted') ?? false;
+      _liveStreamSubscription = _liveStreamChannel.receiveBroadcastStream().listen((dynamic event) {
+        if (event is Map) {
+          final packageName = (event['packageName'] ?? '').toString();
+          final title = (event['title'] ?? '').toString();
+          final message = (event['message'] ?? '').toString();
+          final isMatched = event['isMatched'] == true;
+          final orderId = event['orderId']?.toString();
+
+          // Extract amount for live card display
+          double? amt;
+          final amtMatch = RegExp(r'(?:₹|Rs\.?|INR)?\s*([\d,]+\.?\d*)').firstMatch(title);
+          if (amtMatch != null) {
+            amt = double.tryParse(amtMatch.group(1)?.replaceAll(',', '') ?? '');
+          }
+
+          final providerName = packageName.contains('paisa')
+              ? 'Google Pay (Live)'
+              : (packageName.contains('phonepe')
+                  ? 'PhonePe (Live)'
+                  : (packageName.contains('paytm') ? 'Paytm (Live)' : 'Push Notification (Live)'));
+
+          final txn = SmsTransaction(
+            id: DateTime.now().millisecondsSinceEpoch.toString(),
+            sender: providerName,
+            rawMessage: '[$title] $message',
+            amount: amt,
+            utr: null,
+            bank: 'Auto-Captured Notification',
+            timestamp: DateTime.now(),
+            isMatched: isMatched,
+            matchedOrderId: orderId,
+          );
+
+          setState(() {
+            _transactions.insert(0, txn);
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  isMatched
+                      ? '⚡ LIVE: Payment matched with Order: $orderId'
+                      : '⚡ LIVE: Captured notification from $providerName',
+                ),
+                backgroundColor: isMatched ? Colors.green.shade700 : Colors.indigo.shade700,
+                duration: const Duration(seconds: 4),
+              ),
+            );
+          }
+        }
+      }, onError: (_) {});
+    } catch (_) {}
+  }
+
+  Future<void> _checkPermissions() async {
+    try {
+      final bool notifGranted = await _notifChannel.invokeMethod('isNotificationAccessGranted') ?? false;
+      final bool batteryIgnored = await _notifChannel.invokeMethod('isBatteryOptimizationIgnored') ?? false;
       if (mounted) {
         setState(() {
-          _isNotifAccessGranted = granted;
+          _isNotifAccessGranted = notifGranted;
+          _isBatteryOptIgnored = batteryIgnored;
         });
       }
-    } catch (_) {
-      // Platform channel not available in web/simulator
-    }
+    } catch (_) {}
+  }
+
+  Future<void> _rebindNotificationListener() async {
+    try {
+      await _notifChannel.invokeMethod('rebindNotificationListener');
+    } catch (_) {}
   }
 
   Future<void> _openNotificationSettings() async {
@@ -89,6 +158,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not open settings: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _requestIgnoreBatteryOptimization() async {
+    try {
+      await _notifChannel.invokeMethod('requestIgnoreBatteryOptimization');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not request battery optimization: $e')),
         );
       }
     }
@@ -128,6 +209,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
     ApiClient.sendHeartbeat().then((s) => setState(() => _isOnline = s));
   }
+
 
   Future<void> _simulateIncomingSms() async {
     final sender = _senderController.text.trim();
@@ -289,7 +371,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             // Notification Access Permission Alert Banner
             if (!_isNotifAccessGranted) ...[
               Container(
-                margin: const EdgeInsets.only(bottom: 16),
+                margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Colors.amber.shade900.withValues(alpha: 0.3),
@@ -329,6 +411,55 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       onPressed: _openNotificationSettings,
                       child: const Text('Enable', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            // Battery Optimization Warning Banner
+            if (!_isBatteryOptIgnored) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade900.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade400.withValues(alpha: 0.6)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.battery_alert, color: Colors.orangeAccent, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Disable Battery Optimization (24/7 Mode)',
+                            style: GoogleFonts.dmSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Android Doze mode puts network to sleep when screen is locked. Set to "Don\'t Optimize" for uninterrupted verification.',
+                            style: TextStyle(color: Colors.white70, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange.shade600,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: _requestIgnoreBatteryOptimization,
+                      child: const Text('Allow', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                     ),
                   ],
                 ),
