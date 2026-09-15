@@ -9,7 +9,18 @@ class ApiClient {
   
   static Future<String> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('server_url') ?? _defaultServerUrl;
+    final saved = prefs.getString('server_url');
+    if (saved == null || 
+        saved.isEmpty || 
+        saved.contains('192.168.') || 
+        saved.contains('109.106.') || 
+        saved.contains('localhost') || 
+        saved.contains('10.0.2.2') ||
+        saved.startsWith('http://')) {
+      await prefs.setString('server_url', _defaultServerUrl);
+      return _defaultServerUrl;
+    }
+    return saved;
   }
 
   static Future<void> setServerUrl(String url) async {

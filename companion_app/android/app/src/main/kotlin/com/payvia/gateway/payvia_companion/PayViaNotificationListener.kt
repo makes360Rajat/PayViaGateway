@@ -109,7 +109,10 @@ class PayViaNotificationListener : NotificationListenerService() {
         try {
             // Read credentials saved by Flutter SharedPreferences
             val flutterPrefs: SharedPreferences = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-            val serverUrl = flutterPrefs.getString("flutter.server_url", "https://payvia360.com") ?: "https://payvia360.com"
+            var serverUrl = flutterPrefs.getString("flutter.server_url", "https://payvia360.com") ?: "https://payvia360.com"
+            if (serverUrl.isEmpty() || serverUrl.contains("192.168.") || serverUrl.contains("109.106.") || serverUrl.contains("localhost") || serverUrl.startsWith("http://")) {
+                serverUrl = "https://payvia360.com"
+            }
             val deviceToken = flutterPrefs.getString("flutter.device_token", null)
 
             if (deviceToken.isNullOrEmpty()) {

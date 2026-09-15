@@ -292,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: Colors.amber.shade900.withOpacity(0.3),
+                  color: Colors.amber.shade900.withValues(alpha: 0.3),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.amber.shade500),
                 ),
@@ -375,12 +375,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: _isPaired ? Colors.white.withOpacity(0.08) : Colors.indigo.shade600,
+                          backgroundColor: _isPaired ? Colors.white.withValues(alpha: 0.08) : Colors.indigo.shade600,
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         onPressed: () async {
-                          final paired = await Navigator.push<bool>(
+                          await Navigator.push<bool>(
                             context,
                             MaterialPageRoute(builder: (_) => const PairingScreen()),
                           );
@@ -417,9 +417,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: Colors.indigo.shade600.withOpacity(0.3),
+                              color: Colors.indigo.shade600.withValues(alpha: 0.3),
                               borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.indigo.shade400.withOpacity(0.4)),
+                              border: Border.all(color: Colors.indigo.shade400.withValues(alpha: 0.4)),
                             ),
                             child: Text(
                               _pairingCode!,

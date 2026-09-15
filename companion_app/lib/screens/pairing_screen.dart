@@ -97,9 +97,9 @@ class _PairingScreenState extends State<PairingScreen> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.indigo.shade900.withOpacity(0.3),
+                color: Colors.indigo.shade900.withValues(alpha: 0.3),
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.indigo.shade500.withOpacity(0.3)),
+                border: Border.all(color: Colors.indigo.shade500.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -161,9 +161,8 @@ class _PairingScreenState extends State<PairingScreen> {
               spacing: 8,
               runSpacing: 6,
               children: [
-                _buildIpChip('payvia360.com (Cloud)', 'https://payvia360.com'),
-                _buildIpChip('localhost:5001 (Dev)', 'http://localhost:5001'),
-                _buildIpChip('10.0.2.2 (Emulator)', 'http://10.0.2.2:5001'),
+                _buildIpChip('payvia360.com (Production)', 'https://payvia360.com'),
+                _buildIpChip('Custom Server URL', 'https://payvia360.com'),
               ],
             ),
             const SizedBox(height: 20),
@@ -267,7 +266,7 @@ class _PairingScreenState extends State<PairingScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.indigo.shade600 : Colors.white.withOpacity(0.06),
+          color: isSelected ? Colors.indigo.shade600 : Colors.white.withValues(alpha: 0.06),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected ? Colors.indigoAccent : Colors.white12,
