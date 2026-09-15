@@ -135,4 +135,37 @@ class ApiClient {
       return {'status': false, 'error': e.toString()};
     }
   }
+
+  static Future<Map<String, dynamic>> ingestNotification({
+    required String packageName,
+    required String title,
+    required String message,
+  }) async {
+    try {
+      final token = await getDeviceToken();
+      if (token == null) {
+        return {'status': false, 'error': 'Device not paired'};
+      }
+
+      final baseUrl = await getServerUrl();
+      final url = Uri.parse('$baseUrl/api/devices/notification-ingest');
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'deviceToken': token,
+          'packageName': packageName,
+          'title': title,
+          'message': message,
+          'timestamp': DateTime.now().toIso8601String(),
+        }),
+      );
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': false, 'error': e.toString()};
+    }
+  }
 }
+

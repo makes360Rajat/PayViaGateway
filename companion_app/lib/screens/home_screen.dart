@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/sms_transaction.dart';
 import '../services/api_client.dart';
@@ -15,33 +16,82 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  static const MethodChannel _notifChannel = MethodChannel('com.payvia.gateway/notifications');
+
   bool _isPaired = false;
   String? _deviceToken;
   String? _pairingCode;
   String _serverUrl = 'https://payvia360.com';
   bool _isOnline = false;
+  bool _isNotifAccessGranted = false;
   Timer? _heartbeatTimer;
   final List<SmsTransaction> _transactions = [];
 
-  // Simulator Form
+  // Mode: 0 = Bank SMS, 1 = UPI Push Notification (GPay/PhonePe)
+  int _simulatorMode = 1;
+
+  // Simulator Form for SMS
   final _senderController = TextEditingController(text: 'AD-HDFCBK');
   final _messageController = TextEditingController(
-    text: 'Dear Customer, your A/c credited with Rs 499.00 on 11-SEP-26 by UPI/419827391823/Ref No.',
+    text: 'Dear Customer, your A/c credited with Rs 1.00 on 15-SEP-26 by UPI/419827391823/Ref No.',
   );
+
+  // Simulator Form for Notifications
+  final _notifPackageController = TextEditingController(text: 'com.google.android.apps.nbu.paisa.user');
+  final _notifTitleController = TextEditingController(text: 'RAHUL paid you ₹1.00');
+  final _notifBodyController = TextEditingController(text: 'BYTE17894501153283049');
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _checkPairingStatus();
+    _checkNotificationAccess();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkNotificationAccess();
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _heartbeatTimer?.cancel();
     _senderController.dispose();
     _messageController.dispose();
+    _notifPackageController.dispose();
+    _notifTitleController.dispose();
+    _notifBodyController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkNotificationAccess() async {
+    try {
+      final bool granted = await _notifChannel.invokeMethod('isNotificationAccessGranted') ?? false;
+      if (mounted) {
+        setState(() {
+          _isNotifAccessGranted = granted;
+        });
+      }
+    } catch (_) {
+      // Platform channel not available in web/simulator
+    }
+  }
+
+  Future<void> _openNotificationSettings() async {
+    try {
+      await _notifChannel.invokeMethod('openNotificationAccessSettings');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open settings: $e')),
+        );
+      }
+    }
   }
 
   Future<void> _checkPairingStatus() async {
@@ -118,7 +168,61 @@ class _HomeScreenState extends State<HomeScreen> {
           content: Text(
             isMatched
                 ? '🎉 Matched with Order: $matchedOrderId'
-                : 'Sms processed (${parsed.amount != null ? '₹${parsed.amount}' : 'No Amount'})',
+                : 'SMS processed (${parsed.amount != null ? '₹${parsed.amount}' : 'No Amount'})',
+          ),
+          backgroundColor: isMatched ? Colors.green.shade700 : Colors.indigo.shade700,
+        ),
+      );
+    }
+  }
+
+  Future<void> _simulateIncomingNotification() async {
+    final pkg = _notifPackageController.text.trim();
+    final title = _notifTitleController.text.trim();
+    final body = _notifBodyController.text.trim();
+
+    if (title.isEmpty) return;
+
+    // Ingest to API Gateway
+    final result = await ApiClient.ingestNotification(
+      packageName: pkg,
+      title: title,
+      message: body,
+    );
+
+    final isMatched = result['matched'] == true;
+    final matchedOrderId = result['orderId'] as String?;
+
+    // Quick parse for UI
+    double? amt;
+    final amtMatch = RegExp(r'(?:₹|Rs\.?|INR)?\s*([\d,]+\.?\d*)').firstMatch(title);
+    if (amtMatch != null) {
+      amt = double.tryParse(amtMatch.group(1)?.replaceAll(',', '') ?? '');
+    }
+
+    final txn = SmsTransaction(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      sender: pkg.contains('paisa') ? 'Google Pay' : (pkg.contains('phonepe') ? 'PhonePe' : 'Push Notification'),
+      rawMessage: '[$title] $body',
+      amount: amt,
+      utr: null,
+      bank: 'UPI Notification',
+      timestamp: DateTime.now(),
+      isMatched: isMatched,
+      matchedOrderId: matchedOrderId,
+    );
+
+    setState(() {
+      _transactions.insert(0, txn);
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isMatched
+                ? '🎉 Notification auto-matched with Order: $matchedOrderId!'
+                : (result['message']?.toString() ?? 'Notification processed'),
           ),
           backgroundColor: isMatched ? Colors.green.shade700 : Colors.indigo.shade700,
         ),
@@ -145,7 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 8),
             Text(
-              'PayVia SMS Gateway',
+              'PayVia Auto-Gateway',
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
@@ -182,6 +286,55 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Notification Access Permission Alert Banner
+            if (!_isNotifAccessGranted) ...[
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade900.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.amber.shade500),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.notifications_active, color: Colors.amberAccent, size: 28),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'GPay / PhonePe Notification Access Required',
+                            style: GoogleFonts.dmSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'To auto-verify UPI push notifications, enable Notification Access for PayVia Companion in Android Settings.',
+                            style: TextStyle(color: Colors.white70, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amber.shade600,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: _openNotificationSettings,
+                      child: const Text('Enable', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
             // Status Card
             Container(
               padding: const EdgeInsets.all(16),
@@ -319,7 +472,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             const SizedBox(height: 16),
 
-            // SMS Simulator Box
+            // Ingestion Simulator Box (Dual Mode: Push Notification vs SMS)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -334,60 +487,129 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Simulate Bank SMS Ingestion',
+                        'Gateway Ingest Simulator',
                         style: GoogleFonts.spaceGrotesk(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                         ),
                       ),
-                      const Icon(Icons.flash_on, color: Colors.amber, size: 16),
+                      Row(
+                        children: [
+                          ChoiceChip(
+                            label: const Text('GPay / Notif', style: TextStyle(fontSize: 11)),
+                            selected: _simulatorMode == 1,
+                            selectedColor: Colors.indigo.shade600,
+                            onSelected: (val) {
+                              if (val) setState(() => _simulatorMode = 1);
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          ChoiceChip(
+                            label: const Text('Bank SMS', style: TextStyle(fontSize: 11)),
+                            selected: _simulatorMode == 0,
+                            selectedColor: Colors.indigo.shade600,
+                            onSelected: (val) {
+                              if (val) setState(() => _simulatorMode = 0);
+                            },
+                          ),
+                        ],
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _senderController,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                    decoration: InputDecoration(
-                      labelText: 'Sender Header (e.g. AD-HDFCBK)',
-                      labelStyle: const TextStyle(color: Colors.white60, fontSize: 11),
-                      filled: true,
-                      fillColor: const Color(0xFF090D16),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+
+                  if (_simulatorMode == 1) ...[
+                    // Notification Form
+                    TextField(
+                      controller: _notifTitleController,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        labelText: 'Notification Title (e.g. RAHUL paid you ₹1.00)',
+                        labelStyle: const TextStyle(color: Colors.white60, fontSize: 11),
+                        filled: true,
+                        fillColor: const Color(0xFF090D16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  TextField(
-                    controller: _messageController,
-                    maxLines: 2,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                    decoration: InputDecoration(
-                      labelText: 'Raw Bank SMS Message',
-                      labelStyle: const TextStyle(color: Colors.white60, fontSize: 11),
-                      filled: true,
-                      fillColor: const Color(0xFF090D16),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _notifBodyController,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        labelText: 'Notification Body / Order ID (e.g. BYTE17894501153283049)',
+                        labelStyle: const TextStyle(color: Colors.white60, fontSize: 11),
+                        filled: true,
+                        fillColor: const Color(0xFF090D16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.indigo.shade600,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.teal.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: _simulateIncomingNotification,
+                        icon: const Icon(Icons.bolt, color: Colors.white, size: 18),
+                        label: const Text('Auto-Match Notification →', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                       ),
-                      onPressed: _simulateIncomingSms,
-                      child: const Text('Parse & Push to Gateway →', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
-                  ),
+                  ] else ...[
+                    // SMS Form
+                    TextField(
+                      controller: _senderController,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        labelText: 'Sender Header (e.g. AD-HDFCBK)',
+                        labelStyle: const TextStyle(color: Colors.white60, fontSize: 11),
+                        filled: true,
+                        fillColor: const Color(0xFF090D16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _messageController,
+                      maxLines: 2,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      decoration: InputDecoration(
+                        labelText: 'Raw Bank SMS Message',
+                        labelStyle: const TextStyle(color: Colors.white60, fontSize: 11),
+                        filled: true,
+                        fillColor: const Color(0xFF090D16),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.indigo.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        ),
+                        onPressed: _simulateIncomingSms,
+                        child: const Text('Parse & Push to Gateway →', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -414,7 +636,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: const Center(
                   child: Text(
-                    'No SMS captured yet.\nIncoming bank credit SMS will appear here in real-time.',
+                    'No SMS or Notifications captured yet.\nIncoming payments will appear here in real-time.',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white54, fontSize: 12),
                   ),
@@ -455,7 +677,12 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           const SizedBox(height: 4),
-                          if (txn.utr != null)
+                          if (txn.matchedOrderId != null)
+                            Text(
+                              'Order: ${txn.matchedOrderId}',
+                              style: GoogleFonts.jetBrainsMono(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                            )
+                          else if (txn.utr != null)
                             Text(
                               'UTR: ${txn.utr}',
                               style: GoogleFonts.jetBrainsMono(color: Colors.indigoAccent, fontSize: 11),

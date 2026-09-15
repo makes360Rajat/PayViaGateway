@@ -81,9 +81,130 @@ export class DetectionEngine {
     return {};
   }
 
+  public static parseNotification(packageName: string, title: string, message: string): { amount?: number; orderId?: string; utr?: string; payerName?: string; provider?: string } {
+    const combined = `${title} ${message}`;
+    let provider = 'UPI_APP';
+
+    if (packageName.includes('nbu.paisa') || /gpay|google\s*pay/i.test(combined)) {
+      provider = 'GPAY';
+    } else if (packageName.includes('phonepe') || /phonepe/i.test(combined)) {
+      provider = 'PHONEPE';
+    } else if (packageName.includes('paytm') || /paytm/i.test(combined)) {
+      provider = 'PAYTM';
+    } else if (packageName.includes('bharatpe') || /bharatpe/i.test(combined)) {
+      provider = 'BHARATPE';
+    }
+
+    // 1. Direct Order ID Extraction (e.g. BYTE17894501153283049)
+    const orderMatch = combined.match(/(BYTE\d{10,24}|ord_[a-zA-Z0-9]+)/i);
+    const orderId = orderMatch ? orderMatch[1] : undefined;
+
+    // 2. Amount Extraction (e.g. "RAHUL paid you ₹1.00", "Received ₹1.00", "Rs. 1.00")
+    const amountMatch = combined.match(/(?:paid\s+you|received|deposited|credited|payment\s+of)\s*(?:of|with|by)?\s*(?:₹|Rs\.?|INR)?\s*([\d,]+\.?\d*)/i) ||
+                        combined.match(/(?:₹|Rs\.?|INR)\s*([\d,]+\.?\d*)/i);
+    let amount: number | undefined;
+    if (amountMatch) {
+      const rawAmount = amountMatch[1].replace(/,/g, '');
+      const parsed = parseFloat(rawAmount);
+      if (!isNaN(parsed)) amount = parsed;
+    }
+
+    // 3. Payer Name Extraction (e.g. "RAHUL paid you", "received from RAHUL")
+    const payerMatch = title.match(/^([A-Za-z\s]+?)\s+paid\s+you/i) ||
+                       combined.match(/(?:received\s+from|from|by)\s+([A-Za-z\s]+?)(?:\.|\s+via|\s+to|$)/i);
+    const payerName = payerMatch ? payerMatch[1].trim() : undefined;
+
+    // 4. 12-Digit UTR Extraction (if present)
+    const utrMatch = combined.match(/(?:UPI|Ref|UTR|txn(?:\s*id)?)\s*[:\-\/]?\s*(\d{12})/i) || combined.match(/\b(\d{12})\b/);
+    const utr = utrMatch ? utrMatch[1] : undefined;
+
+    return { amount, orderId, utr, payerName, provider };
+  }
+
+  public static async processIncomingNotification(
+    deviceId: string,
+    tenantId: string,
+    packageName: string,
+    title: string,
+    message: string
+  ): Promise<{ matched: boolean; orderId?: string; message: string }> {
+    const parsed = this.parseNotification(packageName, title, message);
+
+    const smsLog: SmsLog = {
+      id: `notif_${uuidv4().slice(0, 8)}`,
+      deviceId,
+      tenantId,
+      sender: `${parsed.provider || 'APP'}:${packageName.split('.').pop() || 'notification'}`,
+      message: `[${title}] ${message}`,
+      parsedAmount: parsed.amount,
+      parsedUtr: parsed.utr,
+      status: 'UNMATCHED',
+      receivedAt: new Date().toISOString()
+    };
+
+    let matchedOrder: Order | undefined;
+
+    // A. Direct Order ID matching (Highest Priority & 100% Deterministic)
+    if (parsed.orderId) {
+      matchedOrder = db.orders.find(
+        o => (o.tenantId === tenantId || !tenantId) && o.orderId.toUpperCase() === parsed.orderId!.toUpperCase()
+      );
+    }
+
+    // B. Amount matching fallback across pending and recently expired orders
+    if (!matchedOrder && parsed.amount) {
+      const openOrders = db.orders.filter(
+        o => o.tenantId === tenantId && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
+      );
+      matchedOrder = openOrders.find(o => Math.abs(o.amount - parsed.amount!) < 0.01);
+
+      if (!matchedOrder) {
+        const recentExpired = db.orders
+          .filter(o => o.tenantId === tenantId && o.status === 'EXPIRED')
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        matchedOrder = recentExpired.find(o => Math.abs(o.amount - parsed.amount!) < 0.01);
+      }
+    }
+
+    if (matchedOrder) {
+      matchedOrder.status = 'TXN_SUCCESS';
+      matchedOrder.utr = parsed.utr || matchedOrder.utr || `NOTIF_${Date.now()}`;
+      matchedOrder.paidAt = new Date().toISOString();
+      matchedOrder.updatedAt = new Date().toISOString();
+      matchedOrder.rawVerificationData = {
+        matchedBy: 'APP_NOTIFICATION_LISTENER',
+        provider: parsed.provider,
+        packageName,
+        title,
+        message,
+        payerName: parsed.payerName,
+        deviceId,
+        capturedAt: new Date().toISOString()
+      };
+
+      smsLog.status = 'PROCESSED';
+      smsLog.matchedOrderId = matchedOrder.orderId;
+      db.smsLogs.push(smsLog);
+      db.save();
+
+      // Trigger Webhook Callback
+      await WebhookService.dispatchOrderCallback(matchedOrder);
+      return { matched: true, orderId: matchedOrder.orderId, message: `Notification matched with Order ${matchedOrder.orderId}!` };
+    }
+
+    db.smsLogs.push(smsLog);
+    db.save();
+    return { matched: false, message: 'Notification logged (no matching order found)' };
+  }
+
   public static async processIncomingSms(deviceId: string, tenantId: string, sender: string, message: string): Promise<{ matched: boolean; orderId?: string }> {
     const parsed = this.parseBankSms(sender, message);
     
+    // Also check for direct Order ID embedded in SMS note
+    const directOrderMatch = message.match(/(BYTE\d{10,24}|ord_[a-zA-Z0-9]+)/i);
+    const directOrderId = directOrderMatch ? directOrderMatch[1] : undefined;
+
     const smsLog: SmsLog = {
       id: `sms_${uuidv4().slice(0, 8)}`,
       deviceId,
@@ -96,39 +217,42 @@ export class DetectionEngine {
       receivedAt: new Date().toISOString()
     };
 
-    if (!parsed.amount || !parsed.utr) {
+    let matchedOrder: Order | undefined;
+
+    // 1. Direct Order ID match
+    if (directOrderId) {
+      matchedOrder = db.orders.find(
+        o => (o.tenantId === tenantId || !tenantId) && o.orderId.toUpperCase() === directOrderId.toUpperCase()
+      );
+    }
+
+    // 2. Amount and UTR matching
+    if (!matchedOrder && parsed.amount) {
+      const openOrders = db.orders.filter(
+        o => o.tenantId === tenantId && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
+      );
+
+      matchedOrder = openOrders.find(o => Math.abs(o.amount - (parsed.amount || 0)) < 0.01);
+
+      if (!matchedOrder) {
+        const recentExpired = db.orders
+          .filter(o => o.tenantId === tenantId && o.status === 'EXPIRED')
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+        matchedOrder = recentExpired.find(o => Math.abs(o.amount - (parsed.amount || 0)) < 0.01);
+      }
+    }
+
+    if (!matchedOrder && (!parsed.amount || !parsed.utr)) {
       smsLog.status = 'IGNORED';
       db.smsLogs.push(smsLog);
       db.save();
       return { matched: false };
     }
 
-    // Match against open pending orders in the tenant (or recently expired if paid before expiry)
-    const openOrders = db.orders.filter(
-      o => o.tenantId === tenantId && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
-    );
-
-    // Look for matching amount within open orders first
-    let matchedOrder = openOrders.find(o => {
-      const amountDiff = Math.abs(o.amount - (parsed.amount || 0));
-      return amountDiff < 0.01; // exact amount match
-    });
-
-    // If no open order, check recent expired orders within last 24 hours
-    if (!matchedOrder) {
-      const recentExpired = db.orders
-        .filter(o => o.tenantId === tenantId && o.status === 'EXPIRED')
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-      matchedOrder = recentExpired.find(o => {
-        const amountDiff = Math.abs(o.amount - (parsed.amount || 0));
-        return amountDiff < 0.01;
-      });
-    }
-
     if (matchedOrder) {
       matchedOrder.status = 'TXN_SUCCESS';
-      matchedOrder.utr = parsed.utr;
+      matchedOrder.utr = parsed.utr || matchedOrder.utr || `SMS_${Date.now()}`;
       matchedOrder.paidAt = new Date().toISOString();
       matchedOrder.updatedAt = new Date().toISOString();
       matchedOrder.rawVerificationData = {

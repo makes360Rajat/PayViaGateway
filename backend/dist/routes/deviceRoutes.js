@@ -144,4 +144,26 @@ router.post('/sms-ingest', async (req, res) => {
         message: result.matched ? `Payment matched with Order ${result.orderId}!` : 'SMS received and logged'
     });
 });
+// Ingest Incoming Push Notification from Companion App (GPay, PhonePe, Paytm, BharatPe)
+router.post('/notification-ingest', async (req, res) => {
+    const { deviceToken, packageName, title, message } = req.body;
+    if (!deviceToken || !title) {
+        return res.status(400).json({ status: false, error: 'deviceToken and title are required' });
+    }
+    const device = database_1.db.devices.find(d => d.deviceToken === deviceToken);
+    if (!device) {
+        return res.status(401).json({ status: false, error: 'Unauthorized device token' });
+    }
+    device.isOnline = true;
+    device.lastHeartbeatAt = new Date().toISOString();
+    device.smsCapturedCount = (device.smsCapturedCount || 0) + 1;
+    // Process via Detection Engine
+    const result = await detectionEngine_1.DetectionEngine.processIncomingNotification(device.id, device.tenantId, packageName || 'com.google.android.apps.nbu.paisa.user', title, message || '');
+    return res.json({
+        status: true,
+        matched: result.matched,
+        orderId: result.orderId || null,
+        message: result.message
+    });
+});
 exports.default = router;
