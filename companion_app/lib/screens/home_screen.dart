@@ -350,33 +350,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Row(
-                        children: [
-                          Container(
-                            height: 10,
-                            width: 10,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: _isOnline ? Colors.greenAccent : Colors.amber,
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              height: 10,
+                              width: 10,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _isOnline ? Colors.greenAccent : Colors.amber,
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isPaired
-                                ? (_isOnline ? 'Active Gateway Online' : 'Device Paired (Connecting...)')
-                                : 'Device Not Paired',
-                            style: GoogleFonts.dmSans(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _isPaired
+                                    ? (_isOnline ? 'Active Gateway Online' : 'Device Paired (Connecting...)')
+                                    : 'Device Not Paired',
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.dmSans(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: 8),
                       ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: _isPaired ? Colors.white.withValues(alpha: 0.08) : Colors.indigo.shade600,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                         onPressed: () async {
@@ -483,8 +489,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Wrap(
+                    alignment: WrapAlignment.spaceBetween,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       Text(
                         'Gateway Ingest Simulator',
@@ -495,9 +504,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         ),
                       ),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           ChoiceChip(
-                            label: const Text('GPay / Notif', style: TextStyle(fontSize: 11)),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            label: const Text('GPay / Notif', style: TextStyle(fontSize: 10)),
                             selected: _simulatorMode == 1,
                             selectedColor: Colors.indigo.shade600,
                             onSelected: (val) {
@@ -506,7 +518,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           ),
                           const SizedBox(width: 6),
                           ChoiceChip(
-                            label: const Text('Bank SMS', style: TextStyle(fontSize: 11)),
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            label: const Text('Bank SMS', style: TextStyle(fontSize: 10)),
                             selected: _simulatorMode == 0,
                             selectedColor: Colors.indigo.shade600,
                             onSelected: (val) {
