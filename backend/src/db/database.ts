@@ -13,8 +13,9 @@ import {
   SmsLog,
   TenantTemplateSettings
 } from '../types';
+import { MySQLClient } from './mysql';
 
-interface DatabaseSchema {
+export interface DatabaseSchema {
   tenants: Tenant[];
   plans: Plan[];
   subscriptions: TenantSubscription[];
@@ -35,6 +36,19 @@ class Database {
 
   constructor() {
     this.data = this.loadDatabase();
+    this.initMySQL();
+  }
+
+  private async initMySQL() {
+    try {
+      const connected = await MySQLClient.testConnection();
+      if (connected) {
+        // Sync current dataset to MySQL to ensure all tables are populated
+        await MySQLClient.syncToMySQL(this.data);
+      }
+    } catch (e: any) {
+      console.warn('MySQL initialization notice:', e.message);
+    }
   }
 
   private loadDatabase(): DatabaseSchema {
@@ -64,6 +78,9 @@ class Database {
         fs.mkdirSync(dir, { recursive: true });
       }
       fs.writeFileSync(DB_FILE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+      
+      // Also persist to MySQL asynchronously
+      MySQLClient.syncToMySQL(data).catch(() => {});
     } catch (e) {
       console.error('Failed to write database file', e);
     }

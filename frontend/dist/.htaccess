@@ -6,8 +6,8 @@
   RewriteCond %{HTTPS} off
   RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-  # Direct API and WebSockets to backend if using Apache proxy
-  # RewriteRule ^api/(.*)$ http://127.0.0.1:5001/api/$1 [P,L]
+  # Route all API requests through the PHP bridge to Node.js
+  RewriteRule ^api(/.*)?$ api/index.php [L,QSA]
 
   # Don't rewrite real files or directories
   RewriteCond %{REQUEST_FILENAME} -f [OR]

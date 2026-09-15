@@ -7,12 +7,26 @@ exports.db = void 0;
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const mysql_1 = require("./mysql");
 const DB_FILE_PATH = path_1.default.join(__dirname, '../../data/database.json');
 class Database {
     data;
     saveTimeout = null;
     constructor() {
         this.data = this.loadDatabase();
+        this.initMySQL();
+    }
+    async initMySQL() {
+        try {
+            const connected = await mysql_1.MySQLClient.testConnection();
+            if (connected) {
+                // Sync current dataset to MySQL to ensure all tables are populated
+                await mysql_1.MySQLClient.syncToMySQL(this.data);
+            }
+        }
+        catch (e) {
+            console.warn('MySQL initialization notice:', e.message);
+        }
     }
     loadDatabase() {
         try {
@@ -39,6 +53,8 @@ class Database {
                 fs_1.default.mkdirSync(dir, { recursive: true });
             }
             fs_1.default.writeFileSync(DB_FILE_PATH, JSON.stringify(data, null, 2), 'utf-8');
+            // Also persist to MySQL asynchronously
+            mysql_1.MySQLClient.syncToMySQL(data).catch(() => { });
         }
         catch (e) {
             console.error('Failed to write database file', e);
