@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ShieldCheck, Lock, Mail, Building, Phone, ArrowRight, Sparkles, UserCheck } from 'lucide-react';
 
 interface AuthPageProps {
-  onSuccess: () => void;
+  onSuccess: (targetPage?: string) => void;
 }
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
@@ -29,7 +29,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       const res = await login(email, password);
       setIsLoading(false);
       if (res.success) {
-        onSuccess();
+        onSuccess('dashboard');
       } else {
         setError(res.error || 'Invalid credentials');
       }
@@ -37,7 +37,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       const res = await register({ name, email, password, businessName, phone });
       setIsLoading(false);
       if (res.success) {
-        onSuccess();
+        // Direct new registrations immediately to Plans Window
+        onSuccess('plans');
       } else {
         setError(res.error || 'Registration failed');
       }
@@ -88,7 +89,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
         <div className="glass-panel p-8 rounded-3xl border border-white/10 shadow-2xl">
           
           <div className="text-center mb-6">
-            <h1 className="font-display text-2xl font-bold text-white">
+            <img src="/weblogo.png" alt="PayVia360 Logo" className="h-16 sm:h-20 w-auto mx-auto mb-2 object-contain drop-shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-transform hover:scale-105" />
+            <p className="text-[10px] sm:text-[11px] text-emerald-400 font-mono font-bold tracking-widest uppercase mb-3">PAYMENT-SETTLEMENT ENGINE</p>
+            <h1 className="font-display text-xl font-bold text-white">
               {isLogin ? 'Welcome Back' : 'Create Merchant Account'}
             </h1>
             <p className="mt-1 text-xs text-slate-400">

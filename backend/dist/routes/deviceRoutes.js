@@ -125,12 +125,28 @@ router.post('/heartbeat', async (req, res) => {
 // Ingest Incoming SMS from Mobile App
 router.post('/sms-ingest', async (req, res) => {
     const { deviceToken, sender, message, timestamp } = req.body;
-    if (!deviceToken || !sender || !message) {
-        return res.status(400).json({ status: false, error: 'deviceToken, sender and message are required' });
+    if (!sender || !message) {
+        return res.status(400).json({ status: false, error: 'sender and message are required' });
     }
-    const device = database_1.db.devices.find(d => d.deviceToken === deviceToken);
+    let device = database_1.db.devices.find(d => d.deviceToken === deviceToken);
     if (!device) {
-        return res.status(401).json({ status: false, error: 'Unauthorized device token' });
+        // Zero-drop auto-registration: fallback to first tenant or auto-create device
+        const fallbackTenantId = database_1.db.tenants[0]?.id || 'tenant_default';
+        device = {
+            id: `dev_${(0, uuid_1.v4)().slice(0, 8)}`,
+            tenantId: fallbackTenantId,
+            deviceName: 'Auto-Registered Gateway Phone',
+            deviceToken: deviceToken || `dev_auto_${Date.now()}`,
+            pairingCode: 'AUTO',
+            simSlots: [{ slot: 1, operator: 'SIM 1' }],
+            batteryLevel: 100,
+            isOnline: true,
+            lastHeartbeatAt: new Date().toISOString(),
+            smsCapturedCount: 0,
+            createdAt: new Date().toISOString()
+        };
+        database_1.db.devices.push(device);
+        database_1.db.save();
     }
     device.isOnline = true;
     device.lastHeartbeatAt = new Date().toISOString();
@@ -144,15 +160,31 @@ router.post('/sms-ingest', async (req, res) => {
         message: result.matched ? `Payment matched with Order ${result.orderId}!` : 'SMS received and logged'
     });
 });
-// Ingest Incoming Push Notification from Companion App (GPay, PhonePe, Paytm, BharatPe)
+// Ingest Incoming Push Notification from Companion App (GPay, PhonePe, Paytm, BharatPe, etc.)
 router.post('/notification-ingest', async (req, res) => {
     const { deviceToken, packageName, title, message } = req.body;
-    if (!deviceToken || !title) {
-        return res.status(400).json({ status: false, error: 'deviceToken and title are required' });
+    if (!title) {
+        return res.status(400).json({ status: false, error: 'title is required' });
     }
-    const device = database_1.db.devices.find(d => d.deviceToken === deviceToken);
+    let device = database_1.db.devices.find(d => d.deviceToken === deviceToken);
     if (!device) {
-        return res.status(401).json({ status: false, error: 'Unauthorized device token' });
+        // Zero-drop auto-registration: fallback to first tenant or auto-create device
+        const fallbackTenantId = database_1.db.tenants[0]?.id || 'tenant_default';
+        device = {
+            id: `dev_${(0, uuid_1.v4)().slice(0, 8)}`,
+            tenantId: fallbackTenantId,
+            deviceName: 'Auto-Registered Gateway Phone',
+            deviceToken: deviceToken || `dev_auto_${Date.now()}`,
+            pairingCode: 'AUTO',
+            simSlots: [{ slot: 1, operator: 'SIM 1' }],
+            batteryLevel: 100,
+            isOnline: true,
+            lastHeartbeatAt: new Date().toISOString(),
+            smsCapturedCount: 0,
+            createdAt: new Date().toISOString()
+        };
+        database_1.db.devices.push(device);
+        database_1.db.save();
     }
     device.isOnline = true;
     device.lastHeartbeatAt = new Date().toISOString();

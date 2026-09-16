@@ -28,6 +28,18 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
         {/* Glow Spheres */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[380px] bg-emerald-500/15 blur-[140px] rounded-full pointer-events-none" />
 
+        {/* Prominent Hero Brand Logo */}
+        <div className="flex flex-col items-center justify-center mb-8 group cursor-pointer" onClick={() => onNavigate('auth')}>
+          <img 
+            src="/weblogo.png" 
+            alt="PayVia360 Payment Gateway" 
+            className="h-20 sm:h-28 md:h-36 w-auto object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.35)] transition-transform duration-500 group-hover:scale-105"
+          />
+          <span className="text-[10px] sm:text-xs font-mono font-bold text-emerald-400 tracking-[0.3em] uppercase mt-2.5 bg-emerald-500/10 border border-emerald-500/30 px-4 py-1.5 rounded-full shadow-glow">
+            PAYMENT-SETTLEMENT ENGINE
+          </span>
+        </div>
+
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 mb-8 backdrop-blur-md shadow-glow">
           <Sparkles className="h-4 w-4 text-amber-400 animate-spin" />
           <span>Next-Gen Direct UPI & Cyber Settlement Infrastructure</span>

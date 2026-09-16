@@ -1,0 +1,27 @@
+name: payment_integration_demo_app
+description: "PayVia360 Payment Gateway SDK Integration Demo — QR Generation, Screenshot Capture & Scanner Settlement"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.2.1
+  google_fonts: ^6.2.1
+  intl: ^0.19.0
+  qr_flutter: ^4.1.0
+  url_launcher: ^6.3.0
+  mobile_scanner: ^5.2.3
+  image_picker: ^1.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

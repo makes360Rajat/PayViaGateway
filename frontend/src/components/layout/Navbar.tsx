@@ -21,8 +21,8 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
   const { user, plan, logout } = useAuth();
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-emerald-500/15 bg-[#040f0c]/90 backdrop-blur-xl">
-      <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-50 w-full border-b border-emerald-500/15 bg-[#040f0c]/95 backdrop-blur-xl">
+      <div className="flex min-h-[4.75rem] items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
         
         {/* Left: Mobile Menu Toggle & Brand */}
         <div className="flex items-center gap-3">
@@ -39,19 +39,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
             </button>
           )}
 
-          <div className="flex items-center gap-3 cursor-pointer group" onClick={() => onNavigate(user ? 'dashboard' : 'landing')}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 via-emerald-500 to-amber-500 shadow-glow group-hover:scale-105 transition">
-              <ShieldCheck className="h-6 w-6 text-black font-bold" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-display text-xl font-bold tracking-tight text-white">PayVia</span>
-                <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
-                  VIP GATEWAY
-                </span>
-              </div>
-              <span className="text-[10px] text-emerald-300/70 font-mono tracking-wider hidden sm:block">CYBER-SETTLEMENT ENGINE</span>
-            </div>
+          <div className="flex flex-col cursor-pointer group justify-center py-1" onClick={() => onNavigate(user ? 'dashboard' : 'landing')}>
+            <img src="/weblogo.png" alt="PayVia360 Logo" className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:scale-105 transition duration-300 drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]" />
+            <span className="text-[8px] sm:text-[9.5px] text-emerald-400 font-mono font-bold tracking-widest uppercase mt-0.5">PAYMENT-SETTLEMENT ENGINE</span>
           </div>
         </div>
 

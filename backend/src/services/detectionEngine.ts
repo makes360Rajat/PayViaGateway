@@ -175,25 +175,41 @@ export class DetectionEngine {
 
     // A. Direct Order ID matching (Highest Priority & 100% Deterministic)
     if (parsed.orderId) {
-      matchedOrder = db.orders.find(
-        o => (o.tenantId === tenantId || !tenantId) && o.orderId.toUpperCase() === parsed.orderId!.toUpperCase()
-      );
+      const targetId = parsed.orderId.toUpperCase();
+      matchedOrder = db.orders.find(o => o.orderId.toUpperCase() === targetId);
     }
 
     // B. Amount matching fallback across pending and recently expired orders
     if (!matchedOrder && parsed.amount) {
-      const openOrders = db.orders.filter(
-        o => o.tenantId === tenantId && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
+      // 1. Check open orders for this tenant
+      let openOrders = db.orders.filter(
+        o => (o.tenantId === tenantId || !tenantId) && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
       );
       matchedOrder = openOrders.find(o => Math.abs(o.amount - parsed.amount!) < 0.01);
 
+      // 2. If no tenant match, check open orders globally across all tenants
+      if (!matchedOrder) {
+        openOrders = db.orders.filter(
+          o => (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
+        );
+        matchedOrder = openOrders.find(o => Math.abs(o.amount - parsed.amount!) < 0.01);
+      }
+
+      // 3. Fallback to recently expired orders (within last 4 hours)
       if (!matchedOrder) {
         const recentExpired = db.orders
-          .filter(o => o.tenantId === tenantId && o.status === 'EXPIRED')
+          .filter(o => o.status === 'EXPIRED')
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         matchedOrder = recentExpired.find(o => Math.abs(o.amount - parsed.amount!) < 0.01);
       }
+    }
+
+    // C. UTR matching if customer already submitted UTR on checkout page
+    if (!matchedOrder && parsed.utr) {
+      matchedOrder = db.orders.find(
+        o => o.utr === parsed.utr && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY' || o.status === 'EXPIRED')
+      );
     }
 
     if (matchedOrder) {
@@ -250,22 +266,27 @@ export class DetectionEngine {
 
     // 1. Direct Order ID match
     if (directOrderId) {
-      matchedOrder = db.orders.find(
-        o => (o.tenantId === tenantId || !tenantId) && o.orderId.toUpperCase() === directOrderId.toUpperCase()
-      );
+      const targetId = directOrderId.toUpperCase();
+      matchedOrder = db.orders.find(o => o.orderId.toUpperCase() === targetId);
     }
 
     // 2. Amount and UTR matching
     if (!matchedOrder && parsed.amount) {
-      const openOrders = db.orders.filter(
-        o => o.tenantId === tenantId && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
+      let openOrders = db.orders.filter(
+        o => (o.tenantId === tenantId || !tenantId) && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
       );
-
       matchedOrder = openOrders.find(o => Math.abs(o.amount - (parsed.amount || 0)) < 0.01);
 
       if (!matchedOrder) {
+        openOrders = db.orders.filter(
+          o => (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
+        );
+        matchedOrder = openOrders.find(o => Math.abs(o.amount - (parsed.amount || 0)) < 0.01);
+      }
+
+      if (!matchedOrder) {
         const recentExpired = db.orders
-          .filter(o => o.tenantId === tenantId && o.status === 'EXPIRED')
+          .filter(o => o.status === 'EXPIRED')
           .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
         matchedOrder = recentExpired.find(o => Math.abs(o.amount - (parsed.amount || 0)) < 0.01);
