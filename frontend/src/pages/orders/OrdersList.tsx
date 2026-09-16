@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ApiService } from '../../services/api';
 import { Order, OrderStatus, PaymentProviderType } from '../../types';
+import { CreatePaymentLinkModal } from '../../components/orders/CreatePaymentLinkModal';
 import { 
   Receipt, 
   Search, 
@@ -9,15 +10,17 @@ import {
   CheckCircle2, 
   XCircle, 
   Clock, 
-  ExternalLink,
-  ShieldAlert,
-  Sparkles,
-  RefreshCw
+  ExternalLink, 
+  ShieldAlert, 
+  Sparkles, 
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 
 export const OrdersList: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -108,12 +111,19 @@ export const OrdersList: React.FC = () => {
   return (
     <div className="space-y-6">
       
+      {/* Create Payment Link Modal */}
+      <CreatePaymentLinkModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onOrderCreated={() => loadOrders()}
+      />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-6 rounded-3xl border border-white/5">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="font-display text-2xl font-bold text-white">Orders & Transaction Records</h1>
-            <span className="rounded-full bg-indigo-500/10 border border-indigo-500/30 px-2.5 py-0.5 text-xs font-mono text-indigo-400">
+            <span className="rounded-full bg-purple-500/10 border border-purple-500/30 px-2.5 py-0.5 text-xs font-mono text-purple-400">
               {orders.length} Total
             </span>
           </div>
@@ -122,7 +132,15 @@ export const OrdersList: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Create Payment Link</span>
+          </button>
+
           <button
             onClick={exportCsv}
             className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
@@ -130,12 +148,13 @@ export const OrdersList: React.FC = () => {
             <Download className="h-3.5 w-3.5" />
             <span>Export CSV</span>
           </button>
+          
           <button
             onClick={loadOrders}
-            className="flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition"
+            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-4 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh Feed</span>
+            <span>Refresh</span>
           </button>
         </div>
       </div>

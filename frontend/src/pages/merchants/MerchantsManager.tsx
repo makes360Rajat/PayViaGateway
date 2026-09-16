@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { ApiService } from '../../services/api';
 import { MerchantAccount, PaymentProviderType } from '../../types';
 import QRCode from 'qrcode';
@@ -27,7 +27,14 @@ import {
   Info,
   Layers,
   ArrowRight,
-  X
+  X,
+  Zap,
+  Radio,
+  ArrowUpRight,
+  Lock,
+  ChevronRight,
+  TrendingUp,
+  Download
 } from 'lucide-react';
 
 interface ProviderConfig {
@@ -35,9 +42,12 @@ interface ProviderConfig {
   name: string;
   badge: string;
   tagline: string;
-  gradient: string;
-  borderGlow: string;
-  icon: string;
+  accentColor: string;
+  textColor: string;
+  bgGradient: string;
+  cardBorder: string;
+  shadowGlow: string;
+  iconInitials: string;
   supportedFields: string[];
 }
 
@@ -46,60 +56,78 @@ const PROVIDERS: ProviderConfig[] = [
     id: 'PAYTM',
     name: 'Paytm Business',
     badge: 'Direct MID API',
-    tagline: 'Instant settlement via Paytm Business merchant credentials',
-    gradient: 'from-blue-600/20 via-indigo-600/10 to-transparent',
-    borderGlow: 'border-blue-500/30 hover:border-blue-500/60',
-    icon: 'PAYTM',
+    tagline: 'Direct settlement via Paytm Business merchant MID & Key',
+    accentColor: '#00BAF2',
+    textColor: 'text-sky-400',
+    bgGradient: 'from-[#00BAF2]/20 via-[#002970]/20 to-transparent',
+    cardBorder: 'border-sky-500/30 hover:border-sky-400/60',
+    shadowGlow: 'shadow-[0_0_25px_rgba(0,186,242,0.15)]',
+    iconInitials: 'PT',
     supportedFields: ['mid', 'merchantKey', 'upiId', 'displayName']
   },
   {
     id: 'BHARATPE',
     name: 'BharatPe Merchant',
-    badge: 'OTP & Dynamic QR',
+    badge: 'Dynamic QR & OTP',
     tagline: 'Live merchant QR session syncing via mobile OTP',
-    gradient: 'from-purple-600/20 via-pink-600/10 to-transparent',
-    borderGlow: 'border-purple-500/30 hover:border-purple-500/60',
-    icon: 'BHARATPE',
+    accentColor: '#5F259F',
+    textColor: 'text-purple-400',
+    bgGradient: 'from-[#5F259F]/25 via-fuchsia-600/15 to-transparent',
+    cardBorder: 'border-purple-500/30 hover:border-purple-400/60',
+    shadowGlow: 'shadow-[0_0_25px_rgba(147,51,234,0.15)]',
+    iconInitials: 'BP',
     supportedFields: ['mobile', 'merchantId', 'upiId', 'displayName']
   },
   {
     id: 'FAMPAY',
-    name: 'FamPay (Gmail)',
+    name: 'FamPay (Gmail Sync)',
     badge: 'Email Alert Sync',
-    tagline: 'Auto-detect incoming payment receipt emails from FamPay',
-    gradient: 'from-amber-500/20 via-orange-500/10 to-transparent',
-    borderGlow: 'border-amber-500/30 hover:border-amber-500/60',
-    icon: 'FAMPAY',
+    tagline: 'Instant settlement detection via FamPay receipt emails',
+    accentColor: '#F59E0B',
+    textColor: 'text-amber-400',
+    bgGradient: 'from-amber-500/25 via-orange-600/15 to-transparent',
+    cardBorder: 'border-amber-500/30 hover:border-amber-400/60',
+    shadowGlow: 'shadow-[0_0_25px_rgba(245,158,11,0.15)]',
+    iconInitials: 'FP',
     supportedFields: ['gmailEmail', 'upiId', 'displayName']
   },
   {
     id: 'CUSTOM_UPI',
-    name: 'Custom UPI (Gateway)',
-    badge: 'Companion App',
-    tagline: 'Android SMS & Notification sensing via 24/7 background listener',
-    gradient: 'from-emerald-500/20 via-teal-500/10 to-transparent',
-    borderGlow: 'border-emerald-500/30 hover:border-emerald-500/60',
-    icon: 'UPI',
+    name: 'Custom UPI Gateway',
+    badge: 'Companion App SMS',
+    tagline: 'Direct UPI VPA with 24/7 background bank SMS sensing',
+    accentColor: '#10B981',
+    textColor: 'text-emerald-400',
+    bgGradient: 'from-emerald-500/25 via-teal-600/15 to-transparent',
+    cardBorder: 'border-emerald-500/30 hover:border-emerald-400/60',
+    shadowGlow: 'shadow-[0_0_25px_rgba(16,185,129,0.15)]',
+    iconInitials: 'UPI',
     supportedFields: ['upiId', 'displayName']
   },
   {
     id: 'FREECHARGE',
-    name: 'Freecharge OTP',
-    badge: 'Auto-Verify',
+    name: 'Freecharge Business',
+    badge: 'Auto OTP Tracking',
     tagline: 'Comment-based payment tracking and automated OTP verification',
-    gradient: 'from-rose-500/20 via-red-500/10 to-transparent',
-    borderGlow: 'border-rose-500/30 hover:border-rose-500/60',
-    icon: 'FREECHARGE',
+    accentColor: '#F43F5E',
+    textColor: 'text-rose-400',
+    bgGradient: 'from-rose-500/25 via-red-600/15 to-transparent',
+    cardBorder: 'border-rose-500/30 hover:border-rose-400/60',
+    shadowGlow: 'shadow-[0_0_25px_rgba(244,63,94,0.15)]',
+    iconInitials: 'FC',
     supportedFields: ['mobile', 'upiId', 'displayName']
   },
   {
     id: 'CRYPTO',
     name: 'Crypto USDT/USDC',
-    badge: 'Multi-Chain',
-    tagline: 'On-chain verification across TRC20, Polygon & BSC networks',
-    gradient: 'from-cyan-500/20 via-teal-500/10 to-transparent',
-    borderGlow: 'border-cyan-500/30 hover:border-cyan-500/60',
-    icon: 'CRYPTO',
+    badge: 'Multi-Chain Settlement',
+    tagline: 'Direct on-chain verification across TRC20, Polygon & BSC',
+    accentColor: '#06B6D4',
+    textColor: 'text-cyan-400',
+    bgGradient: 'from-cyan-500/25 via-indigo-600/15 to-transparent',
+    cardBorder: 'border-cyan-500/30 hover:border-cyan-400/60',
+    shadowGlow: 'shadow-[0_0_25px_rgba(6,182,212,0.15)]',
+    iconInitials: 'USDT',
     supportedFields: ['trc20', 'polygon', 'bsc']
   }
 ];
@@ -109,9 +137,8 @@ export const MerchantsManager: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterProvider, setFilterProvider] = useState<string>('ALL');
-  const [filterStatus, setFilterStatus] = useState<string>('ALL');
 
-  // In-Page Builder State
+  // In-Page Add / Connect Modal State
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [builderProvider, setBuilderProvider] = useState<PaymentProviderType>('PAYTM');
   const [label, setLabel] = useState('');
@@ -138,20 +165,19 @@ export const MerchantsManager: React.FC = () => {
   const [editMerchantKey, setEditMerchantKey] = useState('');
   const [editMobile, setEditMobile] = useState('');
 
-  // Test QR Modal State
+  // Test Live QR Modal State
   const [testQrAccount, setTestQrAccount] = useState<MerchantAccount | null>(null);
+  const [testQrAmount, setTestQrAmount] = useState('100.00');
   const [testQrDataUrl, setTestQrDataUrl] = useState<string>('');
 
-  // OTP Modal State
+  // OTP Sync Modal State (BharatPe / Freecharge)
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [activeOtpMerchant, setActiveOtpMerchant] = useState<MerchantAccount | null>(null);
   const [otpInput, setOtpInput] = useState('');
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
-  // Copy Feedback
+  // Copy Feedback & Toast
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  // Toast message
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -173,10 +199,11 @@ export const MerchantsManager: React.FC = () => {
   }, []);
 
   const handleStartAddProvider = (providerId: PaymentProviderType) => {
+    const provConfig = PROVIDERS.find(p => p.id === providerId);
     setBuilderProvider(providerId);
-    setLabel(`${providerId.charAt(0) + providerId.slice(1).toLowerCase()} Account`);
+    setLabel(`${provConfig?.name || providerId} Store`);
     setUpiId(providerId === 'CRYPTO' ? 'crypto-vault' : '');
-    setDisplayName('My Store');
+    setDisplayName('My Business');
     setWeight(1);
     setIntentEnabled(true);
     setMid('');
@@ -186,10 +213,6 @@ export const MerchantsManager: React.FC = () => {
     setTrc20Address('');
     setPolygonAddress('');
     setIsBuilderOpen(true);
-    // Smooth scroll to builder
-    setTimeout(() => {
-      document.getElementById('inpage-builder-section')?.scrollIntoView({ behavior: 'smooth' });
-    }, 50);
   };
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -210,9 +233,9 @@ export const MerchantsManager: React.FC = () => {
 
     const res = await ApiService.createMerchant({
       provider: builderProvider,
-      label,
+      label: label || `${builderProvider} Account`,
       upiId: upiId || 'gateway@upi',
-      displayName: displayName || label,
+      displayName: displayName || label || 'Store',
       weight: Number(weight) || 1,
       intentEnabled,
       credentials
@@ -289,731 +312,754 @@ export const MerchantsManager: React.FC = () => {
     }
   };
 
-  const handleShowTestQr = async (account: MerchantAccount) => {
-    setTestQrAccount(account);
-    const upiUri = `upi://pay?pa=${encodeURIComponent(account.upiId)}&pn=${encodeURIComponent(account.displayName)}&am=1.00&cu=INR&tn=PayVia_Test_Scan`;
+  const generateTestQr = async (account: MerchantAccount, amountVal: string) => {
+    const amt = parseFloat(amountVal) || 1.00;
+    const upiUri = `upi://pay?pa=${encodeURIComponent(account.upiId)}&pn=${encodeURIComponent(account.displayName || account.label)}&am=${amt.toFixed(2)}&cu=INR&tn=PayVia_Test_Scan`;
     try {
-      const qr = await QRCode.toDataURL(upiUri, { width: 320, margin: 2 });
+      const qr = await QRCode.toDataURL(upiUri, { 
+        width: 320, 
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#ffffff'
+        }
+      });
       setTestQrDataUrl(qr);
     } catch (e) {
       console.error(e);
     }
   };
 
-  const handleCopy = (text: string, id: string) => {
+  const handleShowTestQr = async (account: MerchantAccount) => {
+    setTestQrAccount(account);
+    await generateTestQr(account, testQrAmount);
+  };
+
+  const handleCopyUpi = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
     setCopiedId(id);
-    showToast('✓ Copied to clipboard');
     setTimeout(() => setCopiedId(null), 2000);
   };
 
   const handleSendOtp = async (account: MerchantAccount) => {
     setActiveOtpMerchant(account);
     setShowOtpModal(true);
-    await ApiService.sendMerchantOtp(account.id, account.credentials?.mobile);
-    showToast(`📱 OTP code requested for ${account.credentials?.mobile || 'merchant number'}`);
+    setOtpInput('');
+    const res = await ApiService.sendMerchantOtp(account.id, account.credentials?.mobile || '9876543210');
+    if (res.status) {
+      showToast(`📲 OTP sent to registered mobile`);
+    } else {
+      showToast(`❌ ${res.error || 'Failed to send OTP'}`);
+    }
   };
 
   const handleVerifyOtp = async () => {
     if (!activeOtpMerchant || !otpInput) return;
     setIsVerifyingOtp(true);
-    const res = await ApiService.verifyMerchantOtp(activeOtpMerchant.id, otpInput, activeOtpMerchant.credentials?.mobile);
+    const res = await ApiService.verifyMerchantOtp(
+      activeOtpMerchant.id,
+      otpInput,
+      activeOtpMerchant.credentials?.mobile || ''
+    );
     setIsVerifyingOtp(false);
-
     if (res.status) {
       setShowOtpModal(false);
-      setOtpInput('');
+      showToast(`✓ BharatPe session refreshed & active!`);
       loadMerchants();
-      showToast('✓ Session synced and verified successfully!');
     } else {
-      showToast(`❌ ${res.error || 'OTP verification failed'}`);
+      showToast(`❌ Invalid OTP or verification failed`);
     }
   };
 
-  // Filtered List
-  const filteredMerchants = merchants.filter(m => {
-    const matchesSearch = 
-      m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.upiId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.provider.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filtered merchants computation
+  const filteredMerchants = useMemo(() => {
+    return merchants.filter((m) => {
+      const matchesSearch = 
+        m.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.upiId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        m.provider.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      const matchesProvider = filterProvider === 'ALL' || m.provider === filterProvider;
+      return matchesSearch && matchesProvider;
+    });
+  }, [merchants, searchQuery, filterProvider]);
 
-    const matchesProvider = filterProvider === 'ALL' || m.provider === filterProvider;
-    const matchesStatus = filterStatus === 'ALL' || m.status === filterStatus;
-
-    return matchesSearch && matchesProvider && matchesStatus;
-  });
-
+  // Statistics
   const activeCount = merchants.filter(m => m.status === 'ACTIVE').length;
-  const pausedCount = merchants.filter(m => m.status === 'PAUSED').length;
-  const totalTxns = merchants.reduce((acc, m) => acc + (m.smsCount || 0), 0);
+  const totalWeight = merchants.filter(m => m.status === 'ACTIVE').reduce((sum, m) => sum + (m.weight || 1), 0);
+  const intentCount = merchants.filter(m => m.intentEnabled !== false).length;
 
   return (
-    <div className="space-y-8 pb-16">
+    <div className="space-y-8 max-w-7xl mx-auto px-2 sm:px-4 py-4">
       
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-slate-900/95 border border-indigo-500/40 px-4 py-3 rounded-2xl text-white shadow-2xl backdrop-blur-md animate-fade-in text-xs font-semibold">
-          <Sparkles className="h-4 w-4 text-indigo-400" />
+        <div className="fixed bottom-6 right-6 z-50 rounded-2xl bg-[#13131f] border border-purple-500/40 px-5 py-3 text-xs font-bold text-white shadow-2xl backdrop-blur-xl animate-bounce flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-purple-400" />
           <span>{toastMessage}</span>
         </div>
       )}
 
-      {/* Hero Header & Quick Stats */}
-      <div className="relative overflow-hidden glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900/90 via-slate-950/90 to-indigo-950/30 shadow-2xl">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        
+      {/* Hero Header Banner */}
+      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 relative overflow-hidden bg-gradient-to-br from-[#13131f]/90 via-[#0b0b12]/80 to-[#181028]/90 shadow-2xl">
+        {/* Glowing Orbs */}
+        <div className="absolute -top-16 -right-16 w-80 h-80 bg-purple-600/15 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute -bottom-16 -left-16 w-80 h-80 bg-sky-600/15 blur-[120px] rounded-full pointer-events-none" />
+
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono font-semibold mb-3">
-              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              Dynamic Multi-Provider Smart Routing
+          <div className="space-y-2">
+            <div className="flex items-center gap-2.5">
+              <div className="h-10 w-10 rounded-2xl bg-gradient-primary flex items-center justify-center text-white shadow-glow">
+                <Wallet className="h-5 w-5" />
+              </div>
+              <div>
+                <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  Connected Merchant Accounts
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-400">
+                  Connect multiple Paytm, BharatPe, FamPay, Freecharge, Custom UPI & Crypto accounts. Orders rotate seamlessly across all active routes.
+                </p>
+              </div>
             </div>
-            <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Connected Merchant Accounts
-            </h1>
-            <p className="mt-1.5 text-xs sm:text-sm text-slate-400 max-w-2xl leading-relaxed">
-              Connect your Paytm, BharatPe, FamPay, Custom UPI and Crypto accounts. Orders automatically rotate across active channels according to configured weight.
-            </p>
+
+            {/* Live Metrics Chips */}
+            <div className="pt-2 flex flex-wrap items-center gap-2.5 text-xs font-mono">
+              <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-slate-300 flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-purple-400" />
+                <strong className="text-white">{merchants.length}</strong> Total Routes
+              </span>
+              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-emerald-400 flex items-center gap-1.5 font-bold">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <strong className="text-white">{activeCount}</strong> Live In Rotation
+              </span>
+              <span className="rounded-full bg-sky-500/10 border border-sky-500/30 px-3 py-1 text-sky-400 flex items-center gap-1.5">
+                <strong className="text-white">{totalWeight}w</strong> Weighted Capacity
+              </span>
+              <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-amber-400 flex items-center gap-1.5">
+                <Zap className="h-3.5 w-3.5" />
+                <strong className="text-white">{intentCount}</strong> Direct Intent Enabled
+              </span>
+            </div>
           </div>
 
-          {/* Stat Badges */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="glass-card px-4 py-3 rounded-2xl border border-white/5 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400 font-bold">
-                <Layers className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Total Accounts</p>
-                <p className="text-base font-bold text-white font-mono">{merchants.length}</p>
-              </div>
-            </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={loadMerchants}
+              className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition active:scale-95"
+            >
+              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
+              <span>Refresh</span>
+            </button>
 
-            <div className="glass-card px-4 py-3 rounded-2xl border border-emerald-500/20 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold text-emerald-400/80 uppercase tracking-wider">Active In Rotation</p>
-                <p className="text-base font-bold text-emerald-300 font-mono">{activeCount}</p>
-              </div>
-            </div>
-
-            <div className="glass-card px-4 py-3 rounded-2xl border border-white/5 flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 font-bold">
-                <Coins className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Total Verified</p>
-                <p className="text-base font-bold text-white font-mono">{totalTxns} Txns</p>
-              </div>
-            </div>
+            <button
+              onClick={() => handleStartAddProvider('PAYTM')}
+              className="flex items-center gap-2 rounded-xl bg-gradient-primary px-5 py-2.5 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Connect Account</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* 1. In-Page Provider Launchpad (Start Adding Directly from Page) */}
-      <div className="space-y-4">
+      {/* Provider Hub: Vibrant Category Cards */}
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-indigo-400" />
-            <h2 className="font-display text-base font-bold text-white">Add & Connect Payment Channel</h2>
-          </div>
-          <span className="text-xs text-slate-400">Click any provider to start adding immediately</span>
+          <h2 className="font-display text-base font-bold text-white flex items-center gap-2">
+            <Layers className="h-4 w-4 text-purple-400" />
+            <span>Supported Gateways & Channels</span>
+          </h2>
+          <span className="text-xs text-slate-400">Click &apos;+ Add&apos; on any provider to link your credentials</span>
         </div>
 
-        {/* 6 Provider Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {PROVIDERS.map((prov) => {
-            const isSelected = isBuilderOpen && builderProvider === prov.id;
+            const connectedList = merchants.filter(m => m.provider === prov.id);
+            const activeList = connectedList.filter(m => m.status === 'ACTIVE');
+
             return (
-              <button
+              <div
                 key={prov.id}
-                onClick={() => handleStartAddProvider(prov.id)}
-                className={`group relative text-left p-4 rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
-                  isSelected
-                    ? 'bg-gradient-to-b from-indigo-900/40 to-slate-900 border-indigo-500 shadow-glow scale-[1.02]'
-                    : `bg-slate-900/60 ${prov.borderGlow} hover:scale-[1.02] hover:bg-slate-900/90`
-                }`}
+                className={`rounded-2xl border ${prov.cardBorder} bg-gradient-to-br ${prov.bgGradient} p-5 backdrop-blur-xl transition-all duration-300 hover:scale-[1.01] flex flex-col justify-between ${prov.shadowGlow}`}
               >
                 <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-mono text-slate-300 font-bold group-hover:text-indigo-300 transition">
-                      {prov.icon}
-                    </span>
-                    <Plus className={`h-4 w-4 transition ${isSelected ? 'text-indigo-400 rotate-45' : 'text-slate-500 group-hover:text-white'}`} />
+                  {/* Top Bar */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="h-12 w-12 rounded-2xl flex items-center justify-center font-extrabold text-sm text-white shadow-md font-mono"
+                        style={{ background: prov.accentColor }}
+                      >
+                        {prov.iconInitials}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
+                          <span>{prov.name}</span>
+                        </h3>
+                        <span className={`inline-block text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border bg-black/40 ${prov.textColor} border-white/10 mt-0.5`}>
+                          {prov.badge}
+                        </span>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleStartAddProvider(prov.id)}
+                      className="rounded-lg bg-white/10 hover:bg-white/20 px-3 py-1.5 text-xs font-bold text-white border border-white/15 transition active:scale-95 shadow-sm"
+                    >
+                      + Add
+                    </button>
                   </div>
-                  <h3 className="font-bold text-xs text-white group-hover:text-indigo-300 transition line-clamp-1">{prov.name}</h3>
-                  <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">{prov.tagline}</p>
+
+                  <p className="mt-3 text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                    {prov.tagline}
+                  </p>
                 </div>
-                
-                <div className="mt-4 pt-2.5 border-t border-white/5 flex items-center justify-between text-[9px] font-semibold text-indigo-400">
-                  <span>{prov.badge}</span>
-                  <ArrowRight className="h-3 w-3 group-hover:translate-x-1 transition" />
+
+                {/* Bottom Channel Status */}
+                <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${connectedList.length > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'}`} />
+                    <span className="font-medium text-slate-300 text-[11px]">
+                      {connectedList.length === 0 ? 'No accounts connected' : `${connectedList.length} linked (${activeList.length} active)`}
+                    </span>
+                  </div>
+
+                  {connectedList.length > 0 && (
+                    <button
+                      onClick={() => setFilterProvider(prov.id)}
+                      className={`text-[11px] font-semibold ${prov.textColor} hover:underline flex items-center gap-0.5`}
+                    >
+                      <span>View</span>
+                      <ArrowRight className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* 2. Expandable In-Page Interactive Builder */}
-      {isBuilderOpen && (
-        <div id="inpage-builder-section" className="glass-panel p-6 sm:p-8 rounded-3xl border border-indigo-500/40 bg-slate-950/95 shadow-2xl animate-fade-in relative">
-          <button 
-            onClick={() => setIsBuilderOpen(false)}
-            className="absolute top-6 right-6 p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition"
-          >
-            <X className="h-5 w-5" />
-          </button>
+      {/* Active Accounts Section */}
+      <div className="space-y-4">
+        
+        {/* Filter & Search Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 glass-panel p-4 rounded-2xl border border-white/5">
+          
+          {/* Provider Filter Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              onClick={() => setFilterProvider('ALL')}
+              className={`rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                filterProvider === 'ALL'
+                  ? 'bg-gradient-primary text-white shadow-glow'
+                  : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              All Accounts ({merchants.length})
+            </button>
 
-          <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
-            <div className="h-10 w-10 rounded-xl bg-gradient-primary flex items-center justify-center text-white font-bold text-sm shadow-glow">
-              {builderProvider.slice(0, 3)}
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-lg font-bold text-white">Connect New {PROVIDERS.find(p => p.id === builderProvider)?.name}</h3>
-                <span className="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold">
-                  {PROVIDERS.find(p => p.id === builderProvider)?.badge}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400">Enter account parameters below. It will immediately join the live smart rotation pool.</p>
-            </div>
+            {PROVIDERS.map((p) => {
+              const count = merchants.filter(m => m.provider === p.id).length;
+              if (count === 0 && filterProvider !== p.id) return null;
+              const isSelected = filterProvider === p.id;
+
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setFilterProvider(p.id)}
+                  className={`rounded-xl px-3 py-1.5 text-xs font-bold transition flex items-center gap-1.5 ${
+                    isSelected
+                      ? 'bg-purple-600 text-white shadow-glow'
+                      : 'bg-white/5 text-slate-400 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: p.accentColor }} />
+                  <span>{p.name.split(' ')[0]} ({count})</span>
+                </button>
+              );
+            })}
           </div>
 
-          <form onSubmit={handleCreate} className="space-y-5 text-xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              
-              {/* Account Label */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">Account Label / Identifier</label>
-                <input
-                  type="text"
-                  required
-                  value={label}
-                  onChange={(e) => setLabel(e.target.value)}
-                  placeholder="e.g. Main Store UPI / Primary BharatPe"
-                  className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
+          {/* Search Input */}
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search by label, UPI ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl bg-slate-900/90 border border-white/10 pl-9 pr-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none"
+            />
+          </div>
+        </div>
 
-              {/* UPI ID / VPA */}
-              {builderProvider !== 'CRYPTO' && (
+        {/* Accounts Grid */}
+        {filteredMerchants.length === 0 ? (
+          <div className="glass-panel p-12 rounded-3xl border border-white/5 text-center space-y-3">
+            <div className="h-14 w-14 rounded-2xl bg-purple-500/10 text-purple-400 flex items-center justify-center mx-auto">
+              <Wallet className="h-7 w-7" />
+            </div>
+            <h3 className="font-bold text-base text-white">No Merchant Accounts Found</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              {searchQuery || filterProvider !== 'ALL'
+                ? 'No merchant accounts match your current filter or search criteria.'
+                : 'Connect your first Paytm, BharatPe, FamPay, Freecharge, or Custom UPI account to start processing direct settlements.'}
+            </p>
+            <button
+              onClick={() => handleStartAddProvider('PAYTM')}
+              className="rounded-xl bg-gradient-primary px-5 py-2 text-xs font-bold text-white shadow-glow hover:brightness-110 transition"
+            >
+              + Connect First Merchant
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredMerchants.map((account) => {
+              const prov = PROVIDERS.find(p => p.id === account.provider) || PROVIDERS[3];
+              const isActive = account.status === 'ACTIVE';
+
+              return (
+                <div
+                  key={account.id}
+                  className={`rounded-3xl border p-5 backdrop-blur-xl transition-all duration-300 relative flex flex-col justify-between ${
+                    isActive
+                      ? `${prov.cardBorder} bg-[#13131f]/90 ${prov.shadowGlow}`
+                      : 'border-white/5 bg-[#0e0e17]/60 opacity-70'
+                  }`}
+                >
+                  <div>
+                    
+                    {/* Card Top: Avatar, Label, Status Toggle */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div 
+                          className="h-12 w-12 rounded-2xl flex items-center justify-center text-white font-mono font-bold text-sm shadow-md shrink-0"
+                          style={{ background: prov.accentColor }}
+                        >
+                          {prov.iconInitials}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="font-bold text-sm text-white truncate max-w-[140px]">{account.label}</h3>
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className={`text-[10px] font-mono font-semibold ${prov.textColor}`}>
+                              {prov.name}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status Toggle Switch */}
+                      <button
+                        onClick={() => handleToggle(account)}
+                        className={`rounded-full px-2.5 py-1 text-[10px] font-mono font-bold flex items-center gap-1 transition ${
+                          isActive
+                            ? 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]'
+                            : 'bg-slate-800 border border-white/10 text-slate-400'
+                        }`}
+                        title={isActive ? 'Click to Pause' : 'Click to Activate'}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                        <span>{isActive ? 'ACTIVE' : 'PAUSED'}</span>
+                      </button>
+                    </div>
+
+                    {/* UPI ID Pill with 1-Click Copy */}
+                    <div className="mt-4 flex items-center justify-between gap-2 rounded-xl bg-black/40 border border-white/10 px-3 py-2 text-xs font-mono">
+                      <span className="text-slate-300 truncate font-semibold">{account.upiId}</span>
+                      <button
+                        onClick={() => handleCopyUpi(account.upiId, account.id)}
+                        className="text-purple-400 hover:text-purple-300 shrink-0 flex items-center gap-1"
+                        title="Copy UPI VPA"
+                      >
+                        {copiedId === account.id ? (
+                          <span className="text-emerald-400 text-[10px] font-bold flex items-center gap-0.5">
+                            <Check className="h-3 w-3" /> Copied
+                          </span>
+                        ) : (
+                          <Copy className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Weight & Intent Badge */}
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="rounded-xl bg-white/5 p-2 border border-white/5">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold block">Routing Weight</span>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="font-bold text-white font-mono text-xs">w{account.weight || 1}</span>
+                          <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                            <div 
+                              className="h-full bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full"
+                              style={{ width: `${Math.min(100, ((account.weight || 1) / 10) * 100)}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="rounded-xl bg-white/5 p-2 border border-white/5">
+                        <span className="text-[10px] text-slate-400 uppercase font-semibold block">Direct Intent</span>
+                        <span className={`text-xs font-bold font-mono ${account.intentEnabled !== false ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          {account.intentEnabled !== false ? '⚡ ENABLED' : 'DISABLED'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Specific Provider Metadata */}
+                    {account.provider === 'PAYTM' && account.credentials?.mid && (
+                      <div className="mt-2 text-[10px] font-mono text-slate-400 truncate">
+                        MID: <span className="text-sky-300">{account.credentials.mid}</span>
+                      </div>
+                    )}
+                    {account.provider === 'BHARATPE' && account.credentials?.mobile && (
+                      <div className="mt-2 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+                        <span>Mobile: {account.credentials.mobile}</span>
+                        <button
+                          onClick={() => handleSendOtp(account)}
+                          className="text-purple-400 hover:text-purple-300 font-bold underline"
+                        >
+                          Sync OTP
+                        </button>
+                      </div>
+                    )}
+                    {account.provider === 'FAMPAY' && account.credentials?.gmailEmail && (
+                      <div className="mt-2 text-[10px] font-mono text-slate-400 truncate">
+                        Gmail: <span className="text-amber-300">{account.credentials.gmailEmail}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions Footer */}
+                  <div className="mt-5 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+                    <button
+                      onClick={() => handleShowTestQr(account)}
+                      className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-purple-500/10 border border-purple-500/25 py-2 text-xs font-bold text-purple-300 hover:bg-purple-500/20 hover:text-white transition"
+                    >
+                      <QrCode className="h-3.5 w-3.5 text-purple-400" />
+                      <span>Test QR</span>
+                    </button>
+
+                    <button
+                      onClick={() => handleOpenEdit(account)}
+                      className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/5 transition"
+                      title="Edit Account Details"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </button>
+
+                    <button
+                      onClick={() => handleDelete(account)}
+                      className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 hover:text-rose-300 border border-rose-500/20 transition"
+                      title="Disconnect Account"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ==================================================================== */}
+      {/* ADD / CONNECT MERCHANT DRAWER / MODAL */}
+      {/* ==================================================================== */}
+      {isBuilderOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 overflow-y-auto">
+          <div className="w-full max-w-2xl rounded-3xl bg-[#13131f] border border-purple-500/30 p-6 sm:p-8 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-2xl bg-gradient-primary flex items-center justify-center text-white shadow-glow">
+                  <Plus className="h-5 w-5" />
+                </div>
                 <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">UPI ID (VPA) for Collections</label>
+                  <h3 className="font-display text-lg font-bold text-white">Connect Merchant Account</h3>
+                  <p className="text-xs text-slate-400">Add a new UPI or Crypto settlement channel into live rotation</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsBuilderOpen(false)}
+                className="rounded-xl p-2 text-slate-400 hover:bg-white/10 hover:text-white transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Provider Selector Cards */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                Select Gateway Provider
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                {PROVIDERS.map((p) => {
+                  const isSelected = builderProvider === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => setBuilderProvider(p.id)}
+                      className={`rounded-2xl border p-3 text-left transition flex items-center gap-2.5 ${
+                        isSelected
+                          ? `${p.cardBorder} bg-gradient-to-br ${p.bgGradient} ring-1 ring-purple-500/50 shadow-glow`
+                          : 'border-white/10 bg-[#0b0b12]/60 hover:bg-white/5'
+                      }`}
+                    >
+                      <div 
+                        className="h-8 w-8 rounded-xl flex items-center justify-center text-white font-mono font-bold text-xs shrink-0"
+                        style={{ background: p.accentColor }}
+                      >
+                        {p.iconInitials}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-bold text-white truncate">{p.name.split(' ')[0]}</div>
+                        <div className="text-[9px] text-slate-400 truncate">{p.badge.split(' ')[0]}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Form Fields */}
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Account Label</label>
                   <input
                     type="text"
                     required
-                    value={upiId}
-                    onChange={(e) => setUpiId(e.target.value)}
-                    placeholder="e.g. merchant@paytm / store@okicici"
-                    className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    placeholder="e.g. Primary Paytm Store"
+                    value={label}
+                    onChange={(e) => setLabel(e.target.value)}
+                    className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
                   />
                 </div>
-              )}
 
-              {/* Display Name */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">Customer Display Name</label>
-                <input
-                  type="text"
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="e.g. Official Tech Store"
-                  className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">UPI VPA Address</label>
+                  <input
+                    type="text"
+                    required={builderProvider !== 'CRYPTO'}
+                    placeholder="merchant@paytm / business@upi"
+                    value={upiId}
+                    onChange={(e) => setUpiId(e.target.value)}
+                    className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Business Display Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Acme Superstore"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Load Balancing Weight (1-10)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={weight}
+                    onChange={(e) => setWeight(Number(e.target.value))}
+                    className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
               </div>
 
-              {/* Rotation Weight Slider */}
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-[11px] font-semibold text-slate-300 uppercase">Traffic Routing Weight</label>
-                  <span className="text-xs font-mono font-bold text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-lg border border-indigo-500/20">{weight}x</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={weight}
-                  onChange={(e) => setWeight(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                />
-                <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                  <span>1x (Standard)</span>
-                  <span>5x (High)</span>
-                  <span>10x (Priority)</span>
-                </div>
-              </div>
-
-              {/* Provider-Specific Credentials */}
+              {/* Provider Specific Credential Inputs */}
               {builderProvider === 'PAYTM' && (
-                <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/10">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">Paytm MID (Merchant ID)</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Paytm Merchant ID (MID)</label>
                     <input
                       type="text"
+                      placeholder="e.g. PAYTM_MID_12345"
                       value={mid}
                       onChange={(e) => setMid(e.target.value)}
-                      placeholder="e.g. STORE982348123982"
-                      className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">Paytm Merchant Key</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Merchant Key</label>
                     <input
                       type="password"
+                      placeholder="e.g. Paytm Production Key"
                       value={merchantKey}
                       onChange={(e) => setMerchantKey(e.target.value)}
-                      placeholder="Secret Merchant Key"
-                      className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
                     />
                   </div>
-                </>
+                </div>
               )}
 
               {(builderProvider === 'BHARATPE' || builderProvider === 'FREECHARGE') && (
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">Registered Mobile Number</label>
+                <div className="pt-2 border-t border-white/10">
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Registered Mobile Number</label>
                   <input
                     type="text"
+                    placeholder="9876543210"
                     value={mobileNumber}
                     onChange={(e) => setMobileNumber(e.target.value)}
-                    placeholder="e.g. 9876543210"
-                    className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
                   />
                 </div>
               )}
 
               {builderProvider === 'FAMPAY' && (
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">FamPay Notification Email</label>
+                <div className="pt-2 border-t border-white/10">
+                  <label className="block text-xs font-medium text-slate-400 mb-1">FamPay Linked Gmail Email</label>
                   <input
                     type="email"
+                    placeholder="youraccount@gmail.com"
                     value={gmailEmail}
                     onChange={(e) => setGmailEmail(e.target.value)}
-                    placeholder="e.g. yourstore@gmail.com"
-                    className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                    className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
                   />
                 </div>
               )}
 
               {builderProvider === 'CRYPTO' && (
-                <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-white/10">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">TRC20 USDT Deposit Address</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">USDT TRC20 Address</label>
                     <input
                       type="text"
+                      placeholder="TX9Q8yJz42mN8K9vP2bQw5R1t7YmU3x8Zb"
                       value={trc20Address}
                       onChange={(e) => setTrc20Address(e.target.value)}
-                      placeholder="e.g. TX9Q8yJz42mN8K9vP2bQw5R1t7YmU3x8Zb"
-                      className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
                     />
                   </div>
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-300 uppercase mb-1.5">Polygon (USDT/USDC) Address</label>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Polygon USDC/USDT Address</label>
                     <input
                       type="text"
+                      placeholder="0x71C2a8B998E1f0E389aDe1b9319B1484C3F6e9A0"
                       value={polygonAddress}
                       onChange={(e) => setPolygonAddress(e.target.value)}
-                      placeholder="e.g. 0x71C2a8B998E1f0E389aDe1b9319B1484C3F6e9A0"
-                      className="w-full rounded-xl bg-slate-900/90 border border-white/10 px-3.5 py-2.5 text-white font-mono placeholder-slate-500 focus:border-indigo-500 focus:outline-none"
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-xs text-white font-mono focus:border-purple-500 focus:outline-none"
                     />
                   </div>
-                </>
+                </div>
               )}
 
-            </div>
-
-            {/* UPI Intent Toggle */}
-            <div className="flex items-center gap-3 pt-2">
-              <input
-                type="checkbox"
-                id="intentToggle"
-                checked={intentEnabled}
-                onChange={(e) => setIntentEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
-              />
-              <label htmlFor="intentToggle" className="text-xs text-slate-300 select-none cursor-pointer">
-                Enable 1-Tap UPI Intent on Mobile Devices (GPay, PhonePe, Paytm apps)
-              </label>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
-              <button
-                type="button"
-                onClick={() => setIsBuilderOpen(false)}
-                className="px-5 py-2.5 rounded-xl border border-white/10 text-slate-400 hover:text-white hover:bg-white/5 font-semibold transition"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-2.5 font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                <span>{isSubmitting ? 'Connecting Account...' : 'Save & Activate Account'}</span>
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* 3. Search & Filter Bar */}
-      <div className="glass-panel p-4 rounded-2xl border border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
-        {/* Search */}
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by label, UPI ID, or provider..."
-            className="w-full pl-9 pr-4 py-2 rounded-xl bg-slate-900 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-          />
-        </div>
-
-        {/* Filter Pills */}
-        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-          {/* Status filter */}
-          <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-white/5 text-xs">
-            <button
-              onClick={() => setFilterStatus('ALL')}
-              className={`px-3 py-1 rounded-lg font-semibold transition ${filterStatus === 'ALL' ? 'bg-indigo-600 text-white shadow-glow' : 'text-slate-400 hover:text-white'}`}
-            >
-              All ({merchants.length})
-            </button>
-            <button
-              onClick={() => setFilterStatus('ACTIVE')}
-              className={`px-3 py-1 rounded-lg font-semibold transition ${filterStatus === 'ACTIVE' ? 'bg-emerald-600 text-white shadow-glow' : 'text-slate-400 hover:text-white'}`}
-            >
-              Active ({activeCount})
-            </button>
-            <button
-              onClick={() => setFilterStatus('PAUSED')}
-              className={`px-3 py-1 rounded-lg font-semibold transition ${filterStatus === 'PAUSED' ? 'bg-amber-600 text-white shadow-glow' : 'text-slate-400 hover:text-white'}`}
-            >
-              Paused ({pausedCount})
-            </button>
-          </div>
-
-          <button
-            onClick={loadMerchants}
-            title="Refresh List"
-            className="p-2 rounded-xl bg-slate-900 border border-white/5 text-slate-400 hover:text-white transition"
-          >
-            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      {/* 4. Creative Grid of Connected Merchant Cards */}
-      {filteredMerchants.length === 0 ? (
-        <div className="glass-panel p-12 text-center rounded-3xl border border-white/5">
-          <Wallet className="h-12 w-12 text-slate-600 mx-auto mb-3" />
-          <h3 className="text-base font-bold text-white">No Merchant Accounts Found</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
-            {searchQuery || filterProvider !== 'ALL' || filterStatus !== 'ALL'
-              ? 'Try adjusting your search or filters'
-              : 'Click on any provider card above to connect your first merchant account and begin routing payments.'}
-          </p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredMerchants.map((account) => {
-            const isBharatPeOrFreecharge = account.provider === 'BHARATPE' || account.provider === 'FREECHARGE';
-            const isFamPay = account.provider === 'FAMPAY';
-            const isCrypto = account.provider === 'CRYPTO';
-            const isActive = account.status === 'ACTIVE';
-            const provConfig = PROVIDERS.find(p => p.id === account.provider);
-
-            return (
-              <div 
-                key={account.id} 
-                className={`relative group glass-card p-6 rounded-3xl border transition-all duration-300 flex flex-col justify-between ${
-                  isActive 
-                    ? 'border-indigo-500/30 hover:border-indigo-500/60 bg-gradient-to-b from-slate-900/90 to-slate-950/90 shadow-xl' 
-                    : 'border-amber-500/20 bg-slate-950/60 opacity-75'
-                }`}
-              >
+              {/* Direct Intent Switch */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
                 <div>
-                  {/* Top Bar: Provider badge & Fast Actions */}
-                  <div className="flex items-start justify-between gap-3 mb-4">
-                    <div className="flex items-center gap-3">
-                      <div className="h-11 w-11 rounded-2xl bg-gradient-primary flex items-center justify-center font-bold text-white shadow-glow text-xs">
-                        {account.provider.slice(0, 3)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="font-bold text-sm text-white group-hover:text-indigo-300 transition">{account.label}</h3>
-                        </div>
-                        <span className="text-[10px] font-mono text-slate-400">{account.displayName || account.provider}</span>
-                      </div>
-                    </div>
-
-                    {/* Action Toolbar */}
-                    <div className="flex items-center gap-1 bg-slate-900/80 border border-white/5 p-1 rounded-xl">
-                      {/* Pause / Resume Button */}
-                      <button
-                        onClick={() => handleToggle(account)}
-                        title={isActive ? 'Pause account from rotation' : 'Resume live traffic rotation'}
-                        className={`p-1.5 rounded-lg transition ${
-                          isActive 
-                            ? 'text-emerald-400 hover:bg-emerald-500/10' 
-                            : 'text-amber-400 hover:bg-amber-500/10'
-                        }`}
-                      >
-                        {isActive ? <Play className="h-4 w-4 fill-current" /> : <Pause className="h-4 w-4 fill-current" />}
-                      </button>
-
-                      {/* Edit Button */}
-                      <button
-                        onClick={() => handleOpenEdit(account)}
-                        title="Edit Account Details"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition"
-                      >
-                        <Edit3 className="h-4 w-4" />
-                      </button>
-
-                      {/* Test QR Preview Button */}
-                      <button
-                        onClick={() => handleShowTestQr(account)}
-                        title="View & Test Live QR"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-indigo-400 hover:bg-indigo-500/10 transition"
-                      >
-                        <QrCode className="h-4 w-4" />
-                      </button>
-
-                      {/* Delete Button */}
-                      <button
-                        onClick={() => handleDelete(account)}
-                        title="Disconnect Merchant Account"
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* VPA & Parameter Details Box */}
-                  <div className="rounded-2xl bg-slate-900/80 p-3.5 border border-white/5 space-y-2 text-xs font-mono">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500 text-[11px]">UPI / Address:</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-slate-200 font-semibold truncate max-w-[140px]">{account.upiId}</span>
-                        <button
-                          onClick={() => handleCopy(account.upiId, account.id)}
-                          title="Copy UPI VPA"
-                          className="text-slate-500 hover:text-white transition"
-                        >
-                          {copiedId === account.id ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500 text-[11px]">Traffic Weight:</span>
-                      <span className="text-indigo-400 font-bold">{account.weight || 1}x</span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500 text-[11px]">UPI 1-Tap Intent:</span>
-                      <span className={account.intentEnabled !== false ? 'text-emerald-400 font-bold' : 'text-slate-500'}>
-                        {account.intentEnabled !== false ? 'Enabled' : 'Disabled'}
-                      </span>
-                    </div>
-
-                    {account.credentials?.mid && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 text-[11px]">Merchant ID:</span>
-                        <span className="text-slate-300 font-mono text-[10px]">{account.credentials.mid}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Special Provider Actions */}
-                  {isBharatPeOrFreecharge && (
-                    <div className="mt-3">
-                      <button
-                        onClick={() => handleSendOtp(account)}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 transition"
-                      >
-                        <Smartphone className="h-3.5 w-3.5" />
-                        <span>Sync OTP Session ({account.credentials?.mobile || 'Linked'})</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {isFamPay && (
-                    <div className="mt-3 flex items-center justify-between text-[11px] rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5 text-amber-300">
-                      <span className="flex items-center gap-1.5">
-                        <Mail className="h-3.5 w-3.5" />
-                        <span>{account.gmailConnected ? 'Gmail Synced' : 'FamPay Email'}</span>
-                      </span>
-                      <span className="text-[10px] font-bold font-mono">{account.gmailEmail || 'pankajpanks007@gmail.com'}</span>
-                    </div>
-                  )}
-
-                  {isCrypto && (
-                    <div className="mt-3 flex items-center justify-between text-[11px] rounded-xl bg-cyan-500/10 border border-cyan-500/20 p-2.5 text-cyan-300 font-mono">
-                      <span className="flex items-center gap-1.5">
-                        <Coins className="h-3.5 w-3.5" />
-                        <span>TRC20 / Polygon</span>
-                      </span>
-                      <span className="text-[10px] font-bold">On-Chain</span>
-                    </div>
-                  )}
+                  <span className="text-xs font-bold text-white block">Direct Intent Routing</span>
+                  <span className="text-[10px] text-slate-400">Trigger GPay, PhonePe, Paytm apps directly on customer mobile devices</span>
                 </div>
-
-                {/* Footer Bar */}
-                <div className="mt-5 pt-3.5 border-t border-white/5 flex items-center justify-between text-[10px]">
-                  <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 font-bold ${
-                      isActive 
-                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                        : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                    }`}>
-                      <span className={`h-1.5 w-1.5 rounded-full ${isActive ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-                      {account.status}
-                    </span>
-                    <span className="text-slate-500 font-mono">
-                      {account.smsCount ? `${account.smsCount} Txns` : '0 Txns'}
-                    </span>
-                  </div>
-
-                  <span className="text-slate-500 font-mono">
-                    {account.lastUsedAt 
-                      ? `Last: ${new Date(account.lastUsedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` 
-                      : 'Standby'}
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Edit Account Modal */}
-      {editingAccount && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="w-full max-w-lg glass-panel p-6 sm:p-7 rounded-3xl border border-white/10 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between pb-4 border-b border-white/10">
-              <div className="flex items-center gap-2.5">
-                <Edit3 className="h-5 w-5 text-indigo-400" />
-                <h3 className="font-bold text-base text-white">Edit Merchant Account</h3>
-              </div>
-              <button onClick={() => setEditingAccount(null)} className="p-1 rounded-lg text-slate-400 hover:text-white">✕</button>
-            </div>
-
-            <form onSubmit={handleSaveEdit} className="space-y-4 mt-5 text-xs">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">Account Label</label>
-                <input
-                  type="text"
-                  required
-                  value={editLabel}
-                  onChange={(e) => setEditLabel(e.target.value)}
-                  className="w-full rounded-xl bg-slate-900 border border-white/10 px-3.5 py-2.5 text-white focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">UPI ID (VPA)</label>
-                <input
-                  type="text"
-                  required
-                  value={editUpiId}
-                  onChange={(e) => setEditUpiId(e.target.value)}
-                  className="w-full rounded-xl bg-slate-900 border border-white/10 px-3.5 py-2.5 text-white font-mono focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">Customer Display Name</label>
-                <input
-                  type="text"
-                  value={editDisplayName}
-                  onChange={(e) => setEditDisplayName(e.target.value)}
-                  className="w-full rounded-xl bg-slate-900 border border-white/10 px-3.5 py-2.5 text-white focus:border-indigo-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="text-[11px] font-semibold text-slate-400 uppercase">Traffic Routing Weight</label>
-                  <span className="text-xs font-mono font-bold text-indigo-400">{editWeight}x</span>
-                </div>
-                <input
-                  type="range"
-                  min={1}
-                  max={10}
-                  value={editWeight}
-                  onChange={(e) => setEditWeight(Number(e.target.value))}
-                  className="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                />
-              </div>
-
-              {editingAccount.provider === 'PAYTM' && (
-                <>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">Paytm MID</label>
-                    <input
-                      type="text"
-                      value={editMid}
-                      onChange={(e) => setEditMid(e.target.value)}
-                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3.5 py-2.5 text-white font-mono focus:border-indigo-500 focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">Merchant Key</label>
-                    <input
-                      type="password"
-                      value={editMerchantKey}
-                      onChange={(e) => setEditMerchantKey(e.target.value)}
-                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3.5 py-2.5 text-white font-mono focus:border-indigo-500 focus:outline-none"
-                    />
-                  </div>
-                </>
-              )}
-
-              {(editingAccount.provider === 'BHARATPE' || editingAccount.provider === 'FREECHARGE') && (
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">Mobile Number</label>
-                  <input
-                    type="text"
-                    value={editMobile}
-                    onChange={(e) => setEditMobile(e.target.value)}
-                    className="w-full rounded-xl bg-slate-900 border border-white/10 px-3.5 py-2.5 text-white font-mono focus:border-indigo-500 focus:outline-none"
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center gap-3 pt-2">
                 <input
                   type="checkbox"
-                  id="editIntentToggle"
-                  checked={editIntentEnabled}
-                  onChange={(e) => setEditIntentEnabled(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-700 bg-slate-800 text-indigo-600 focus:ring-indigo-500"
+                  checked={intentEnabled}
+                  onChange={(e) => setIntentEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded bg-slate-800 text-purple-600 focus:ring-purple-500 cursor-pointer"
                 />
-                <label htmlFor="editIntentToggle" className="text-xs text-slate-300 select-none cursor-pointer">
-                  Enable 1-Tap UPI Intent on Mobile
-                </label>
               </div>
 
+              {/* Modal Buttons */}
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
                 <button
                   type="button"
-                  onClick={() => setEditingAccount(null)}
-                  className="px-4 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-white font-semibold transition"
+                  onClick={() => setIsBuilderOpen(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-400 hover:bg-white/5 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-gradient-primary font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition"
+                  disabled={isSubmitting}
+                  className="rounded-xl bg-gradient-primary px-6 py-2.5 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Connecting...' : 'Connect & Activate Route'}
+                </button>
+              </div>
+            </form>
+
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* EDIT MERCHANT MODAL */}
+      {/* ==================================================================== */}
+      {editingAccount && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-lg rounded-3xl bg-[#13131f] border border-purple-500/30 p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <h3 className="font-bold text-base text-white">Edit Account: {editingAccount.label}</h3>
+              <button onClick={() => setEditingAccount(null)} className="text-slate-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} className="space-y-3 text-xs">
+              <div>
+                <label className="block text-slate-400 mb-1">Label</label>
+                <input
+                  type="text"
+                  value={editLabel}
+                  onChange={(e) => setEditLabel(e.target.value)}
+                  className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">UPI ID</label>
+                <input
+                  type="text"
+                  value={editUpiId}
+                  onChange={(e) => setEditUpiId(e.target.value)}
+                  className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Display Name</label>
+                <input
+                  type="text"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Routing Weight (1-10)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={editWeight}
+                  onChange={(e) => setEditWeight(Number(e.target.value))}
+                  className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingAccount(null)}
+                  className="rounded-xl px-4 py-2 text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-gradient-primary px-5 py-2 font-bold text-white shadow-glow"
                 >
                   Save Changes
                 </button>
@@ -1023,86 +1069,93 @@ export const MerchantsManager: React.FC = () => {
         </div>
       )}
 
-      {/* Test QR Modal */}
+      {/* ==================================================================== */}
+      {/* TEST LIVE QR MODAL */}
+      {/* ==================================================================== */}
       {testQrAccount && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="w-full max-w-sm glass-panel p-6 rounded-3xl border border-white/10 shadow-2xl text-center">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
-              <h3 className="font-bold text-sm text-white">Live Test QR Code</h3>
-              <button onClick={() => setTestQrAccount(null)} className="text-slate-400 hover:text-white">✕</button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-[#13131f] border border-purple-500/30 p-6 shadow-2xl space-y-4 text-center">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="text-left">
+                <h3 className="font-bold text-sm text-white">Test QR: {testQrAccount.label}</h3>
+                <p className="text-[11px] text-slate-400">{testQrAccount.upiId}</p>
+              </div>
+              <button onClick={() => setTestQrAccount(null)} className="text-slate-400 hover:text-white">
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl inline-block shadow-xl mb-4">
+            {/* Amount Selector */}
+            <div className="space-y-1">
+              <span className="text-[11px] text-slate-400 block font-medium">Test Amount (INR)</span>
+              <div className="flex items-center justify-center gap-2">
+                {['1.00', '10.00', '100.00', '499.00'].map((val) => (
+                  <button
+                    key={val}
+                    onClick={() => {
+                      setTestQrAmount(val);
+                      generateTestQr(testQrAccount, val);
+                    }}
+                    className={`rounded-lg px-2.5 py-1 text-xs font-mono font-bold transition ${
+                      testQrAmount === val
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                    }`}
+                  >
+                    ₹{val}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* QR Code Canvas */}
+            <div className="p-3 bg-white rounded-2xl mx-auto w-fit shadow-xl border-2 border-slate-200">
               {testQrDataUrl ? (
-                <img src={testQrDataUrl} alt="UPI QR" className="w-56 h-56 mx-auto" />
+                <img src={testQrDataUrl} alt="UPI QR" className="h-48 w-48 rounded-lg object-contain" />
               ) : (
-                <div className="w-56 h-56 flex items-center justify-center text-slate-400 font-mono text-xs">Generating...</div>
+                <div className="h-48 w-48 flex items-center justify-center text-slate-400 text-xs">Generating QR...</div>
               )}
             </div>
 
-            <div className="space-y-1 text-xs">
-              <p className="font-bold text-white">{testQrAccount.displayName}</p>
-              <p className="font-mono text-indigo-400">{testQrAccount.upiId}</p>
-              <p className="text-[10px] text-slate-400 mt-2">Scan using any UPI app (GPay, PhonePe, Paytm, BHIM) to test live intent.</p>
-            </div>
+            <p className="text-[11px] text-slate-400">
+              Scan with GPay, PhonePe, Paytm or BHIM to verify live routing.
+            </p>
 
             <button
               onClick={() => setTestQrAccount(null)}
-              className="mt-5 w-full py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs transition"
+              className="w-full rounded-xl bg-white/10 hover:bg-white/15 py-2.5 text-xs font-bold text-white transition"
             >
-              Close
+              Close Test
             </button>
           </div>
         </div>
       )}
 
-      {/* OTP Verification Modal */}
-      {showOtpModal && activeOtpMerchant && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="w-full max-w-md glass-panel p-6 rounded-3xl border border-purple-500/30 shadow-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <div className="flex items-center gap-2">
-                <Smartphone className="h-5 w-5 text-purple-400" />
-                <h3 className="font-bold text-base text-white">Sync {activeOtpMerchant.provider} Session</h3>
-              </div>
-              <button onClick={() => setShowOtpModal(false)} className="text-slate-400 hover:text-white">✕</button>
-            </div>
-
-            <div className="mt-4 space-y-4 text-xs">
-              <p className="text-slate-400">
-                Enter the OTP sent to <strong className="text-white font-mono">{activeOtpMerchant.credentials?.mobile || 'registered mobile'}</strong> to authenticate the live session.
-              </p>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase mb-1.5">Enter 6-Digit OTP</label>
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={otpInput}
-                  onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
-                  placeholder="e.g. 123456"
-                  className="w-full text-center tracking-[0.5em] text-lg font-mono rounded-xl bg-slate-900 border border-white/10 px-4 py-3 text-white focus:border-purple-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
-                <button
-                  type="button"
-                  onClick={() => setShowOtpModal(false)}
-                  className="px-4 py-2 rounded-xl border border-white/10 text-slate-400 hover:text-white font-semibold transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleVerifyOtp}
-                  disabled={isVerifyingOtp || otpInput.length < 4}
-                  className="flex items-center gap-2 rounded-xl bg-purple-600 px-5 py-2 font-bold text-white shadow-glow hover:bg-purple-500 transition disabled:opacity-50"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
-                  <span>{isVerifyingOtp ? 'Verifying...' : 'Verify & Sync'}</span>
-                </button>
-              </div>
+      {/* ==================================================================== */}
+      {/* OTP VERIFY MODAL (BharatPe) */}
+      {/* ==================================================================== */}
+      {showOtpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-3xl bg-[#13131f] border border-purple-500/30 p-6 shadow-2xl space-y-4">
+            <h3 className="font-bold text-sm text-white">Enter BharatPe OTP</h3>
+            <p className="text-xs text-slate-400">Enter the 6-digit OTP sent to your registered mobile number.</p>
+            <input
+              type="text"
+              maxLength={6}
+              placeholder="123456"
+              value={otpInput}
+              onChange={(e) => setOtpInput(e.target.value)}
+              className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-center text-lg font-mono text-white tracking-widest"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowOtpModal(false)} className="px-3 py-1.5 text-xs text-slate-400">Cancel</button>
+              <button
+                onClick={handleVerifyOtp}
+                disabled={isVerifyingOtp || otpInput.length < 4}
+                className="rounded-xl bg-gradient-primary px-4 py-1.5 text-xs font-bold text-white"
+              >
+                {isVerifyingOtp ? 'Verifying...' : 'Verify OTP'}
+              </button>
             </div>
           </div>
         </div>

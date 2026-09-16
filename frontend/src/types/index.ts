@@ -149,8 +149,9 @@ export interface PaymentTemplateConfig {
   id: string;
   name: string;
   description: string;
-  category: string;
+  category?: string;
   badge?: string;
+  swatch?: string[];
 }
 
 export interface TenantTemplateSettings {

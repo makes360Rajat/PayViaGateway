@@ -7,7 +7,7 @@ import { AuthPage } from './pages/auth/AuthPage';
 import { DashboardOverview } from './pages/dashboard/DashboardOverview';
 import { MerchantsManager } from './pages/merchants/MerchantsManager';
 import { OrdersList } from './pages/orders/OrdersList';
-import { CreateOrderPage } from './pages/orders/CreateOrderPage';
+import { ProfilePage } from './pages/profile/ProfilePage';
 import { DevicesManager } from './pages/devices/DevicesManager';
 import { ApiKeysManager } from './pages/apiKeys/ApiKeysManager';
 import { PaymentPageCustomizer } from './pages/paymentPage/PaymentPageCustomizer';
@@ -15,6 +15,7 @@ import { TemplatePreview } from './pages/preview/TemplatePreview';
 import { PlansPricing } from './pages/plans/PlansPricing';
 import { AdminPanel } from './pages/admin/AdminPanel';
 import { ApiDocsPage } from './pages/docs/ApiDocsPage';
+import { ContactPage } from './pages/contact/ContactPage';
 import { HostedCheckout } from './pages/checkout/HostedCheckout';
 import { SubscriptionLockNotice } from './components/common/SubscriptionLockNotice';
 import { AlertTriangle, Zap, Lock } from 'lucide-react';
@@ -28,16 +29,17 @@ const getPageFromPath = (path: string, user: any): string => {
   if (clean === '/dashboard' || clean === '/demo') return 'dashboard';
   if (clean === '/merchants') return 'merchants';
   if (clean === '/orders') return 'orders';
-  if (clean === '/create-order' || clean === '/create') return 'create-order';
+  if (clean === '/profile' || clean === '/my-profile' || clean === '/account') return 'profile';
   if (clean === '/devices') return 'devices';
   if (clean === '/api-keys' || clean === '/keys') return 'api-keys';
   if (clean === '/payment-page' || clean === '/templates') return 'payment-page';
   if (clean === '/plans' || clean === '/pricing') return 'plans';
   if (clean === '/admin') return 'admin';
   if (clean === '/docs' || clean === '/api-docs') return 'docs';
+  if (clean === '/contact' || clean === '/support') return 'contact';
 
-  // Root path '/'
-  if (clean === '/') {
+  // Root path '/' or anchor pages
+  if (clean === '/' || clean === '/what' || clean === '/product' || clean === '/security' || clean === '/privacy' || clean === '/google-data' || clean === '/api') {
     return user ? 'dashboard' : 'landing';
   }
 
@@ -51,13 +53,14 @@ const getPathFromPage = (page: string): string => {
     case 'dashboard': return '/dashboard';
     case 'merchants': return '/merchants';
     case 'orders': return '/orders';
-    case 'create-order': return '/create-order';
+    case 'profile': return '/profile';
     case 'devices': return '/devices';
     case 'api-keys': return '/api-keys';
     case 'payment-page': return '/payment-page';
     case 'plans': return '/plans';
     case 'admin': return '/admin';
     case 'docs': return '/docs';
+    case 'contact': return '/contact';
     default: return '/';
   }
 };
@@ -72,7 +75,10 @@ export const MainApp: React.FC = () => {
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  const isSubscriptionActive = user?.role === 'SUPER_ADMIN' || subscription?.status === 'ACTIVE';
+  const isSubscriptionActive = 
+    user?.role === 'SUPER_ADMIN' || 
+    subscription?.status === 'ACTIVE' || 
+    (!!user && subscription?.status !== 'EXPIRED' && subscription?.status !== 'CANCELLED');
 
   // Sync state on browser URL popstate (Back/Forward navigation)
   useEffect(() => {
@@ -205,24 +211,18 @@ export const MainApp: React.FC = () => {
             />
           )}
 
-          {/* If user is authenticated but has NO active plan, lock dashboard and feature pages */}
-          {user && !isSubscriptionActive && (currentPage === 'dashboard' || currentPage === 'merchants' || currentPage === 'orders' || currentPage === 'create-order' || currentPage === 'devices' || currentPage === 'api-keys' || currentPage === 'payment-page') ? (
-            <SubscriptionLockNotice onNavigate={handleNavigate} />
-          ) : (
-            <>
-              {currentPage === 'dashboard' && <DashboardOverview onNavigate={handleNavigate} />}
-              {currentPage === 'merchants' && <MerchantsManager />}
-              {currentPage === 'orders' && <OrdersList />}
-              {currentPage === 'create-order' && <CreateOrderPage />}
-              {currentPage === 'devices' && <DevicesManager />}
-              {currentPage === 'api-keys' && <ApiKeysManager />}
-              {currentPage === 'payment-page' && <PaymentPageCustomizer onNavigate={handleNavigate} />}
-            </>
-          )}
+          {currentPage === 'dashboard' && <DashboardOverview onNavigate={handleNavigate} />}
+          {currentPage === 'merchants' && <MerchantsManager />}
+          {currentPage === 'orders' && <OrdersList />}
+          {currentPage === 'profile' && <ProfilePage />}
+          {currentPage === 'devices' && <DevicesManager />}
+          {currentPage === 'api-keys' && <ApiKeysManager />}
+          {currentPage === 'payment-page' && <PaymentPageCustomizer onNavigate={handleNavigate} />}
 
           {currentPage === 'plans' && <PlansPricing onNavigate={handleNavigate} />}
           {currentPage === 'admin' && <AdminPanel />}
           {currentPage === 'docs' && <ApiDocsPage />}
+          {currentPage === 'contact' && <ContactPage onNavigate={handleNavigate} />}
         </main>
       </div>
     </div>

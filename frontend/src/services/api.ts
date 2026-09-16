@@ -67,6 +67,20 @@ export class ApiService {
     });
   }
 
+  public static updatePassword(password: string) {
+    return this.request('/auth/update-password', {
+      method: 'POST',
+      body: JSON.stringify({ password })
+    });
+  }
+
+  public static updateEmail(email: string) {
+    return this.request('/auth/update-email', {
+      method: 'POST',
+      body: JSON.stringify({ email })
+    });
+  }
+
   // Merchants
   public static getMerchants() {
     return this.request('/merchants');
@@ -232,6 +246,20 @@ export class ApiService {
     });
   }
 
+  // Contact Us Public Inquiries
+  public static submitContactMessage(data: {
+    name: string;
+    email: string;
+    subject?: string;
+    orderId?: string;
+    message: string;
+  }) {
+    return this.request('/contact', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
   // Admin
   public static getAdminStats() {
     return this.request('/admin/stats');
@@ -257,6 +285,23 @@ export class ApiService {
     return this.request('/admin/plans/create', {
       method: 'POST',
       body: JSON.stringify(data)
+    });
+  }
+
+  public static getAdminContacts() {
+    return this.request('/admin/contacts');
+  }
+
+  public static updateAdminContact(id: string, data: { status?: string; replyNotes?: string }) {
+    return this.request(`/admin/contacts/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public static deleteAdminContact(id: string) {
+    return this.request(`/admin/contacts/${id}`, {
+      method: 'DELETE'
     });
   }
 }

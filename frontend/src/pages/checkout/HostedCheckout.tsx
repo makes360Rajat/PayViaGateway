@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import confetti from 'canvas-confetti';
+import QRCode from 'qrcode';
 import { CheckoutData } from '../../types';
 import { ApiService } from '../../services/api';
 import { TemplateRenderer } from '../../components/templates/TemplateRenderer';
@@ -16,15 +17,84 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
   const [timeRemaining, setTimeRemaining] = useState<number>(600);
   const [isVerifying, setIsVerifying] = useState(false);
 
+  // Helper to normalize checkout response & ensure QR code is generated
+  const normalizeAndSetData = async (raw: any) => {
+    if (!raw) return;
+
+    const upiId = raw.payment_details?.upi_id || raw.upiId || raw.upi_id || 'merchant@upi';
+    const merchantName = raw.branding?.brand_name || raw.merchantName || raw.display_name || 'PayVia Verified Merchant';
+    const orderId = raw.order_id || raw.orderId || 'PV_ORDER';
+    const amount = Number(raw.amount || 0);
+    const merchantNameEncoded = encodeURIComponent(merchantName);
+    const orderIdEncoded = encodeURIComponent(orderId);
+
+    const upiIntent = raw.payment_details?.upi_intent_url || raw.upiIntentUrl || raw.upi_intent_url || 
+      `upi://pay?pa=${upiId}&pn=${merchantNameEncoded}&am=${amount}&cu=INR&tn=${orderIdEncoded}`;
+
+    let qrCodeBase64 = raw.payment_details?.qr_code_base64;
+    if (!qrCodeBase64) {
+      try {
+        qrCodeBase64 = await QRCode.toDataURL(upiIntent, {
+          width: 360,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#ffffff'
+          }
+        });
+      } catch (e) {
+        console.error('Failed to generate dynamic QR code:', e);
+      }
+    }
+
+    const intents = {
+      generic: upiIntent,
+      gpay: `gpay://upi/pay?pa=${upiId}&pn=${merchantNameEncoded}&am=${amount}&cu=INR&tn=${orderIdEncoded}`,
+      phonepe: `phonepe://pay?pa=${upiId}&pn=${merchantNameEncoded}&am=${amount}&cu=INR&tn=${orderIdEncoded}`,
+      paytm: `paytmmp://pay?pa=${upiId}&pn=${merchantNameEncoded}&am=${amount}&cu=INR&tn=${orderIdEncoded}`,
+      bhim: `bhim://upi/pay?pa=${upiId}&pn=${merchantNameEncoded}&am=${amount}&cu=INR&tn=${orderIdEncoded}`,
+      cred: `cred://upi/pay?pa=${upiId}&pn=${merchantNameEncoded}&am=${amount}&cu=INR&tn=${orderIdEncoded}`
+    };
+
+    const normalized: CheckoutData = {
+      order_id: orderId,
+      amount: amount,
+      currency: raw.currency || 'INR',
+      status: raw.status || 'PENDING',
+      provider: raw.provider || 'CUSTOM_UPI',
+      template: raw.template || 'template_1',
+      remark1: raw.remark1 || raw.remark || '',
+      customer_name: raw.customer_name || raw.customerName || '',
+      customer_mobile: raw.customer_mobile || raw.customerMobile || '',
+      expires_at: raw.expires_at || raw.expiresAt || new Date(Date.now() + 600000).toISOString(),
+      return_url: raw.return_url || raw.returnUrl,
+      utr: raw.utr,
+      branding: {
+        brand_name: merchantName,
+        brand_color: raw.branding?.brand_color || '#8b5cf6'
+      },
+      payment_details: {
+        upi_id: upiId,
+        display_name: merchantName,
+        upi_uri: upiIntent,
+        qr_code_base64: qrCodeBase64 || '',
+        intents: intents
+      }
+    };
+
+    setData(normalized);
+
+    const expiresAt = new Date(normalized.expires_at).getTime();
+    const diffSeconds = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+    setTimeRemaining(diffSeconds > 0 ? diffSeconds : 600);
+  };
+
   // Fetch initial checkout data
   const loadData = async () => {
     try {
       const res = await ApiService.getCheckoutData(token);
       if (res.status && res.data) {
-        setData(res.data);
-        const expiresAt = new Date(res.data.expires_at).getTime();
-        const diffSeconds = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
-        setTimeRemaining(diffSeconds);
+        await normalizeAndSetData(res.data);
       } else {
         setError(res.error || 'Payment link not found or expired');
       }
@@ -50,7 +120,7 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
         const res = await ApiService.getCheckoutData(token);
         if (res.status && res.data) {
           if (res.data.status !== data.status) {
-            setData(res.data);
+            await normalizeAndSetData(res.data);
             if (res.data.status === 'TXN_SUCCESS') {
               triggerSuccessCelebration(res.data);
             }
@@ -104,10 +174,10 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#090d16] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0b0b12] flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent"></div>
-          <span className="text-xs font-mono text-slate-400">Loading secure payment session...</span>
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-purple-500 border-t-transparent shadow-[0_0_15px_rgba(139,92,246,0.5)]"></div>
+          <span className="text-xs font-mono text-purple-300">Loading secure payment session...</span>
         </div>
       </div>
     );
@@ -115,8 +185,8 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
 
   if (error || !data) {
     return (
-      <div className="min-h-screen bg-[#090d16] flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-2xl border border-rose-500/20 bg-slate-900/80 p-6 text-center text-white">
+      <div className="min-h-screen bg-[#0b0b12] flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-2xl border border-rose-500/20 bg-[#13131f]/90 p-6 text-center text-white shadow-2xl backdrop-blur-xl">
           <XCircle className="mx-auto h-12 w-12 text-rose-500 mb-3" />
           <h2 className="text-lg font-bold">Payment Session Unavailable</h2>
           <p className="mt-1 text-xs text-slate-400">{error || 'This payment link has expired or does not exist.'}</p>
@@ -128,8 +198,8 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
   // Success State View
   if (data.status === 'TXN_SUCCESS') {
     return (
-      <div className="min-h-screen bg-[#090d16] flex items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-3xl border border-emerald-500/30 bg-slate-900/90 backdrop-blur-2xl p-8 text-center text-white shadow-2xl shadow-emerald-500/10">
+      <div className="min-h-screen bg-[#0b0b12] flex items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-3xl border border-emerald-500/30 bg-[#13131f]/95 backdrop-blur-2xl p-8 text-center text-white shadow-2xl shadow-emerald-500/10">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500/10 border border-emerald-500/30 mb-4 animate-bounce">
             <CheckCircle2 className="h-10 w-10 text-emerald-400" />
           </div>
@@ -139,7 +209,7 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
           <h2 className="text-2xl font-bold font-display mt-3">₹{data.amount.toFixed(2)} Paid</h2>
           <p className="mt-1 text-xs text-slate-400">Transaction settled directly to merchant.</p>
 
-          <div className="my-6 rounded-2xl bg-slate-950/60 border border-white/5 p-4 text-left space-y-2 text-xs font-mono">
+          <div className="my-6 rounded-2xl bg-[#0b0b12]/80 border border-white/5 p-4 text-left space-y-2 text-xs font-mono">
             <div className="flex justify-between">
               <span className="text-slate-400">Order ID:</span>
               <span className="text-slate-200">{data.order_id}</span>
@@ -152,7 +222,7 @@ export const HostedCheckout: React.FC<HostedCheckoutProps> = ({ token }) => {
             )}
             <div className="flex justify-between">
               <span className="text-slate-400">Payment Mode:</span>
-              <span className="text-indigo-300">{data.provider}</span>
+              <span className="text-purple-300">{data.provider}</span>
             </div>
           </div>
 
