@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ApiService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { Order, MerchantAccount, PaymentTemplateConfig } from '../../types';
 import QRCode from 'qrcode';
 import { 
@@ -27,6 +28,7 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
   onClose,
   onOrderCreated
 }) => {
+  const { refreshProfile } = useAuth();
   const [amount, setAmount] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
@@ -92,6 +94,7 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
       if (onOrderCreated) {
         onOrderCreated(order);
       }
+      refreshProfile();
 
       // Generate dynamic QR for popup
       if (order.paymentUrl) {

@@ -1,17 +1,18 @@
 import React, { useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  ShieldCheck, 
-  Zap, 
-  Wallet, 
-  Smartphone, 
-  RotateCw, 
-  Sparkles, 
-  CheckCircle2, 
-  Lock, 
-  ArrowRight, 
-  Code2, 
-  Cpu, 
+import payviaLogo from '../../assets/payvia_logo_white_text.png';
+import {
+  ShieldCheck,
+  Zap,
+  Wallet,
+  Smartphone,
+  RotateCw,
+  Sparkles,
+  CheckCircle2,
+  Lock,
+  ArrowRight,
+  Code2,
+  Cpu,
   Layers,
   Check,
   ExternalLink,
@@ -52,10 +53,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="min-h-screen bg-[#040f0c] text-emerald-50 selection:bg-emerald-500/30 selection:text-emerald-200">
-      
+
       {/* Hero Section */}
       <section className="relative pt-20 pb-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center overflow-hidden">
-        
+
         {/* Glow Spheres */}
         <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[650px] h-[380px] bg-emerald-500/15 blur-[140px] rounded-full pointer-events-none" />
 
@@ -67,14 +68,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
             className="inline-flex flex-col items-center justify-center group cursor-pointer relative z-10 p-2 rounded-2xl transition-all duration-300 hover:scale-105 focus:outline-none"
             aria-label="PayVia360 Portal Login / Dashboard"
           >
-            <img 
-              src="/payvia_logo_white_text.png" 
-              alt="PayVia360 Payment Gateway" 
-              className="h-20 sm:h-28 md:h-36 w-auto object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.35)] transition-transform duration-500 group-hover:brightness-110"
+            <img
+              src={payviaLogo}
+              alt="PayVia360 Payment Gateway"
+              className="h-10 sm:h-14 md:h-20 w-auto object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.35)] transition-transform duration-500 group-hover:brightness-110"
             />
-            <span className="text-[10px] sm:text-xs font-mono font-bold text-emerald-400 tracking-[0.3em] uppercase mt-2.5 bg-emerald-500/10 border border-emerald-500/30 px-4 py-1.5 rounded-full shadow-glow group-hover:bg-emerald-500/20 group-hover:border-emerald-400/50 transition-colors">
-              PAYMENT-SETTLEMENT ENGINE
-            </span>
           </button>
         </div>
 
@@ -83,7 +81,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
           <span>Next-Gen Direct UPI & Cyber Settlement Infrastructure</span>
         </div>
 
-        <h1 className="font-display text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight max-w-5xl mx-auto leading-[1.1]">
+        <h1 className="font-display text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight max-w-5xl mx-auto leading-[1.1]">
           Merchant Payment Collection <br />
           <span className="text-gradient">& Transaction Management</span>
         </h1>
@@ -259,17 +257,17 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
           ======================================================== */}
       <section id="api" className="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-emerald-500/15">
         <div className="flex flex-col lg:flex-row items-start justify-between gap-12">
-          
+
           <div className="lg:w-1/2 space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/35 bg-indigo-500/10 px-3.5 py-1 text-xs font-semibold text-indigo-300 font-mono">
               <Terminal className="h-3.5 w-3.5 text-indigo-400" />
               <span>DEVELOPER API & WEBSOCKETS</span>
             </div>
-            
+
             <h2 className="font-display text-3xl sm:text-5xl font-extrabold text-white leading-tight">
               Powerful REST API Built for Developers
             </h2>
-            
+
             <p className="text-emerald-200/80 text-sm sm:text-base leading-relaxed">
               PayVia provides modern APIs that let your application integrate payment collection and transaction management in minutes. Every capability is production-ready, fully documented, and backed by ready-made SDKs.
             </p>
@@ -337,7 +335,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
             </div>
 
             <pre className="text-xs font-mono text-slate-300 overflow-x-auto leading-relaxed">
-{`curl -X POST https://payvia360.com/api/orders \\
+              {`curl -X POST https://payvia360.com/api/orders \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer pv_live_secret_key" \\
   -d '{
@@ -371,29 +369,31 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
         <div className="glass-panel p-8 sm:p-12 rounded-3xl border border-emerald-500/30 relative overflow-hidden shadow-glow">
           <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/10 blur-[120px] rounded-full pointer-events-none" />
 
-          <div className="max-w-4xl space-y-6">
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3.5 py-1 text-xs font-semibold text-emerald-300 font-mono">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              <span>GOOGLE DATA TRANSPARENCY & COMPLIANCE</span>
+          <div className="max-w-4xl mx-auto space-y-8">
+            <div className="text-center space-y-4 flex flex-col items-center">
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-3.5 py-1 text-xs font-semibold text-emerald-300 font-mono">
+                <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                <span>GOOGLE DATA TRANSPARENCY & COMPLIANCE</span>
+              </div>
+
+              <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-white">
+                Why PayVia Uses Google Account Data
+              </h2>
+
+              <p className="text-emerald-200/80 text-sm sm:text-base leading-relaxed max-w-3xl mx-auto text-center">
+                Google account access in PayVia is completely optional and is used for <strong>one specific feature only</strong>: verifying payments received on a FamPay merchant account that you connect yourself. PayVia does not use Google Sign-In to log you in, and it does not request Google Drive, Calendar, Sheets, or Contacts data.
+              </p>
             </div>
 
-            <h2 className="font-display text-3xl sm:text-4xl font-extrabold text-white">
-              Why PayVia Uses Google Account Data
-            </h2>
-
-            <p className="text-emerald-200/80 text-sm sm:text-base leading-relaxed">
-              Google account access in PayVia is completely optional and is used for <strong>one specific feature only</strong>: verifying payments received on a FamPay merchant account that you connect yourself. PayVia does not use Google Sign-In to log you in, and it does not request Google Drive, Calendar, Sheets, or Contacts data.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-              <div className="rounded-2xl bg-slate-900/80 p-4 border border-white/5 space-y-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="rounded-2xl bg-slate-900/80 p-5 border border-white/5 space-y-2">
                 <span className="text-xs font-mono font-bold text-emerald-400 block">.../auth/userinfo.email</span>
                 <p className="text-xs text-slate-300 leading-relaxed">
                   Used solely to confirm the email address of the linked Google account and display it on your FamPay merchant card.
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-slate-900/80 p-4 border border-white/5 space-y-2">
+              <div className="rounded-2xl bg-slate-900/80 p-5 border border-white/5 space-y-2">
                 <span className="text-xs font-mono font-bold text-amber-400 block">.../auth/gmail.readonly</span>
                 <p className="text-xs text-slate-300 leading-relaxed">
                   Gmail is searched strictly while one of your payment requests is pending, and only for FamPay "payment received" notification emails so the amount and UTR can be matched.
@@ -401,7 +401,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
               </div>
             </div>
 
-            <div className="rounded-2xl bg-emerald-950/40 p-5 border border-emerald-500/25 space-y-3 text-xs text-emerald-200/90 leading-relaxed">
+            <div className="rounded-2xl bg-emerald-950/40 p-6 border border-emerald-500/25 space-y-3 text-xs text-emerald-200/90 leading-relaxed">
               <h4 className="font-bold text-sm text-white">Google Limited Use Compliance Notice:</h4>
               <p>
                 PayVia does not send, modify, or delete emails; does not read unrelated personal messages; and <strong>never sells Google data, uses it for advertising, or uses it to train AI models</strong>. PayVia’s use and transfer of information received from Google APIs adheres strictly to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer" className="text-emerald-400 underline font-semibold">Google API Services User Data Policy</a>, including the Limited Use requirements.
@@ -459,80 +459,177 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
         </div>
       </section>
 
-      {/* ========================================================
-          5. CTA & CONTACT SECTION
-          ======================================================== */}
-      <section className="py-20 px-4 max-w-5xl mx-auto text-center">
-        <div className="glass-panel p-10 sm:p-14 rounded-3xl border border-emerald-500/35 relative overflow-hidden shadow-glow">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/15 blur-3xl rounded-full pointer-events-none" />
-          <h2 className="font-display text-3xl sm:text-5xl font-extrabold text-white">Ready to Launch Your Gateway?</h2>
-          <p className="mt-4 text-emerald-200/80 max-w-xl mx-auto text-sm sm:text-base">
-            Create an account in 30 seconds, connect your accounts, and generate your first hosted payment link or API key.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <button
-              onClick={() => onNavigate(user ? 'dashboard' : 'auth')}
-              className="rounded-xl bg-gradient-primary px-8 py-3.5 text-sm font-bold text-black shadow-glow hover:brightness-110 active:scale-95 transition"
-            >
-              {user ? 'Go to Dashboard' : 'Get Started Free'}
-            </button>
-            <button
-              onClick={() => onNavigate('contact')}
-              className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-6 py-3.5 text-sm font-bold text-emerald-300 hover:bg-emerald-500/20 transition"
-            >
-              Contact Support
-            </button>
-          </div>
-        </div>
-      </section>
+
 
       {/* ========================================================
           6. FOOTER
           ======================================================== */}
-      <footer className="border-t border-emerald-500/15 bg-[#030907] py-14 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
-          
-          <div className="space-y-4 md:col-span-1">
-            <img src="/payvia_logo_white_text.png" alt="PayVia360 Logo" className="h-10 w-auto object-contain" />
-            <p className="text-xs text-emerald-300/70 leading-relaxed font-mono">
-              The high-velocity zero-commission direct-to-merchant payment management and transaction sensing platform.
-            </p>
-            <span className="text-[10px] text-emerald-400 font-mono font-bold block">
-              © 2026 PayVia360 Engine. All rights reserved.
-            </span>
-          </div>
+      <footer className="relative border-t border-emerald-500/20 bg-[#020b06] overflow-hidden">
 
-          <div>
-            <h4 className="font-bold text-xs uppercase tracking-wider text-white mb-3 font-mono">Product</h4>
-            <ul className="space-y-2 text-xs text-emerald-300/70">
-              <li><button onClick={() => scrollToSection('what')} className="hover:text-emerald-400 transition">Overview & Workflow</button></li>
-              <li><button onClick={() => scrollToSection('what')} className="hover:text-emerald-400 transition">Supported Connectors</button></li>
-              <li><button onClick={() => scrollToSection('api')} className="hover:text-emerald-400 transition">API Capabilities</button></li>
-              <li><button onClick={() => onNavigate('plans')} className="hover:text-emerald-400 transition">Pricing Plans</button></li>
-            </ul>
-          </div>
+        {/* Background ambient glows */}
+        <div className="absolute top-0 left-1/4 w-[500px] h-[200px] bg-emerald-500/5 blur-[120px] rounded-full pointer-events-none" />
+        <div className="absolute top-0 right-1/4 w-[400px] h-[160px] bg-teal-500/5 blur-[100px] rounded-full pointer-events-none" />
 
-          <div>
-            <h4 className="font-bold text-xs uppercase tracking-wider text-white mb-3 font-mono">Developer & Trust</h4>
-            <ul className="space-y-2 text-xs text-emerald-300/70">
-              <li><button onClick={() => onNavigate('docs')} className="hover:text-emerald-400 transition">Documentation</button></li>
-              <li><button onClick={() => scrollToSection('google-data')} className="hover:text-emerald-400 transition">Google Data Transparency</button></li>
-              <li><button onClick={() => scrollToSection('security')} className="hover:text-emerald-400 transition">Security & Privacy</button></li>
-              <li><button onClick={() => onNavigate('api-keys')} className="hover:text-emerald-400 transition">API Keys & Webhooks</button></li>
-            </ul>
+        {/* Top CTA Strip */}
+        <div className="border-b border-emerald-500/10 py-10 px-4 sm:px-6 lg:px-8">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="text-center sm:text-left">
+              <p className="text-xs font-mono font-bold uppercase tracking-widest text-emerald-400 mb-1">Ready to go live?</p>
+              <h3 className="font-display text-xl sm:text-2xl font-extrabold text-white">Start collecting payments in minutes.</h3>
+            </div>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <button
+                onClick={() => onNavigate(user ? 'dashboard' : 'auth')}
+                className="flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 text-sm font-bold text-black shadow-glow hover:brightness-110 active:scale-95 transition"
+              >
+                <span>{user ? 'Open Dashboard' : 'Get Started Free'}</span>
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => onNavigate('docs')}
+                className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/20 transition"
+              >
+                <Code2 className="h-4 w-4" />
+                <span>Docs</span>
+              </button>
+            </div>
           </div>
-
-          <div>
-            <h4 className="font-bold text-xs uppercase tracking-wider text-white mb-3 font-mono">Support & Legal</h4>
-            <ul className="space-y-2 text-xs text-emerald-300/70">
-              <li><button onClick={() => onNavigate('contact')} className="hover:text-emerald-400 transition">Contact Support</button></li>
-              <li><a href="https://t.me/makes360" target="_blank" rel="noreferrer" className="hover:text-cyan-400 transition flex items-center gap-1">Telegram (@makes360)</a></li>
-              <li><a href="mailto:support@payvia360.com" className="hover:text-emerald-400 transition">support@payvia360.com</a></li>
-              <li><button onClick={() => scrollToSection('security')} className="hover:text-emerald-400 transition">Terms of Service</button></li>
-            </ul>
-          </div>
-
         </div>
+
+        {/* Main Footer Grid */}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-10">
+
+            {/* Brand Column */}
+            <div className="md:col-span-4 space-y-6">
+              <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                <img src={payviaLogo} alt="PayVia360" className="h-7 w-auto object-contain opacity-95 hover:opacity-100 transition" />
+              </button>
+              <p className="text-[11px] text-emerald-300/50 leading-relaxed max-w-xs">
+                Zero-commission direct-to-merchant payment management and transaction sensing.
+              </p>
+
+              {/* Status Badge */}
+              <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/8 px-3.5 py-1.5">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] font-mono font-bold text-emerald-400 tracking-wider">ALL SYSTEMS OPERATIONAL</span>
+              </div>
+
+              {/* Social / Contact Pills */}
+              <div className="flex flex-wrap gap-2">
+                <a
+                  href="mailto:support@payvia360.com"
+                  className="flex items-center gap-1.5 rounded-lg border border-white/8 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-emerald-300/80 hover:bg-emerald-500/15 hover:text-emerald-300 hover:border-emerald-500/30 transition"
+                >
+                  <Mail className="h-3 w-3" />
+                  support@payvia360.com
+                </a>
+
+              </div>
+            </div>
+
+            {/* Spacer */}
+            <div className="hidden md:block md:col-span-1" />
+
+            {/* Links Grid */}
+            <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-8">
+
+              {/* Product */}
+              <div>
+                <div className="flex items-center gap-2 mb-5">
+                  <span className="h-3 w-0.5 rounded-full bg-emerald-500" />
+                  <h4 className="font-bold text-[10px] uppercase tracking-widest text-emerald-400 font-mono">Product</h4>
+                </div>
+                <ul className="space-y-3">
+                  {[
+                    { label: 'Overview & Workflow', action: () => scrollToSection('what') },
+                    { label: 'Supported Connectors', action: () => scrollToSection('what') },
+                    { label: 'API Capabilities', action: () => scrollToSection('api') },
+                    { label: 'Pricing Plans', action: () => onNavigate('plans') },
+                  ].map(({ label, action }) => (
+                    <li key={label}>
+                      <button
+                        onClick={action}
+                        className="text-xs text-slate-400 hover:text-emerald-300 hover:translate-x-1 transition-all duration-200 text-left"
+                      >
+                        {label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Developer & Trust */}
+              <div>
+                <div className="flex items-center gap-2 mb-5">
+                  <span className="h-3 w-0.5 rounded-full bg-amber-400" />
+                  <h4 className="font-bold text-[10px] uppercase tracking-widest text-amber-400 font-mono">Developer</h4>
+                </div>
+                <ul className="space-y-3">
+                  {[
+                    { label: 'Documentation', action: () => onNavigate('docs') },
+                    { label: 'Google Data Transparency', action: () => scrollToSection('google-data') },
+                    { label: 'Security & Privacy', action: () => scrollToSection('security') },
+                    { label: 'API Keys & Webhooks', action: () => onNavigate('api-keys') },
+                  ].map(({ label, action }) => (
+                    <li key={label}>
+                      <button
+                        onClick={action}
+                        className="text-xs text-slate-400 hover:text-amber-300 hover:translate-x-1 transition-all duration-200 text-left"
+                      >
+                        {label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              {/* Support & Legal */}
+              <div>
+                <div className="flex items-center gap-2 mb-5">
+                  <span className="h-3 w-0.5 rounded-full bg-teal-400" />
+                  <h4 className="font-bold text-[10px] uppercase tracking-widest text-teal-400 font-mono">Support</h4>
+                </div>
+                <ul className="space-y-3">
+                  {[
+                    { label: 'Contact Support', action: () => onNavigate('contact') },
+                    { label: 'Terms of Service', action: () => onNavigate('terms') },
+                  ].map(({ label, action }) => (
+                    <li key={label}>
+                      <button
+                        onClick={action}
+                        className="text-xs text-slate-400 hover:text-teal-300 hover:translate-x-1 transition-all duration-200 text-left"
+                      >
+                        {label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Bar */}
+        <div className="border-t border-white/5">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <p className="text-[10px] font-mono text-slate-600">
+              © 2026 <span className="text-emerald-500/70 font-bold">PayVia360 Engine</span>. All rights reserved. Built with zero-custody architecture.
+            </p>
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] font-mono text-slate-600">v2.6 Live</span>
+              <span className="h-3 w-px bg-white/10" />
+              <span className="text-[10px] font-mono text-slate-600">India · Direct UPI</span>
+              <span className="h-3 w-px bg-white/10" />
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono text-emerald-500/60">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                LIVE
+              </span>
+            </div>
+          </div>
+        </div>
+
       </footer>
 
     </div>

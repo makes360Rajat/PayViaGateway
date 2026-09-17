@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ApiService } from '../../services/api';
-import { Order, MerchantAccount } from '../../types';
+import { Order, MerchantAccount, Device } from '../../types';
 import { CreatePaymentLinkModal } from '../../components/orders/CreatePaymentLinkModal';
 import {
   TrendingUp,
@@ -15,7 +15,10 @@ import {
   Sparkles,
   Zap,
   Activity,
-  Plus
+  Plus,
+  Smartphone,
+  Battery,
+  BatteryCharging
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -26,15 +29,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
   const { user, plan } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [merchants, setMerchants] = useState<MerchantAccount[]>([]);
+  const [devices, setDevices] = useState<Device[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [ordersRes, merchantsRes] = await Promise.all([
+      const [ordersRes, merchantsRes, devicesRes] = await Promise.all([
         ApiService.getOrders({ limit: 15 }),
-        ApiService.getMerchants()
+        ApiService.getMerchants(),
+        ApiService.getDevices()
       ]);
 
       if (ordersRes.status && ordersRes.data) {
@@ -42,6 +47,9 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       }
       if (merchantsRes.status && merchantsRes.data) {
         setMerchants(merchantsRes.data);
+      }
+      if (devicesRes.status && devicesRes.data) {
+        setDevices(devicesRes.data);
       }
     } catch (e) {}
     setIsLoading(false);
@@ -67,6 +75,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     : '100.0';
 
   const activeMerchantsCount = merchants.filter(m => m.status === 'ACTIVE').length;
+  const onlineDevicesCount = devices.filter(d => d.isOnline).length;
 
   return (
     <div className="space-y-6">
@@ -78,29 +87,30 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         onOrderCreated={() => loadData()}
       />
 
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 glass-panel p-6 rounded-3xl border border-white/5 relative overflow-hidden">
-        <div className="absolute -top-10 right-10 w-64 h-32 bg-purple-500/10 blur-3xl rounded-full pointer-events-none" />
+      {/* Streamlined Top Header Row (No Cluttered Card) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <h1 className="font-display text-2xl font-bold text-white tracking-tight">
               Dashboard
             </h1>
-            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 font-mono">
-              LIVE
+            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 font-mono flex items-center gap-1.5 shadow-glow">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+              <span>LIVE</span>
             </span>
           </div>
-          <p className="mt-1 text-xs text-slate-400">
-            Overview of your direct UPI settlement across all {merchants.length} connected accounts.
+          <p className="mt-0.5 text-xs text-slate-400">
+            Real-time settlement overview across {merchants.length} merchant routes and {devices.length} SMS gateway devices.
           </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <button
             onClick={loadData}
-            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 transition"
+            title="Refresh Live Data"
+            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/80 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition active:scale-95"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-emerald-400' : ''}`} />
             <span>Refresh</span>
           </button>
           
@@ -114,7 +124,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
 
           <button
             onClick={() => onNavigate('orders')}
-            className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3.5 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 transition"
+            className="flex items-center gap-1.5 rounded-xl border border-purple-500/30 bg-purple-500/10 px-3.5 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-500/20 hover:text-white transition active:scale-95"
           >
             <Receipt className="h-3.5 w-3.5" />
             <span>View All</span>
@@ -122,8 +132,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         </div>
       </div>
 
-      {/* Metrics Row (4 Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Metrics Row (5 Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         
         {/* Today Volume */}
         <div className="glass-card p-5 rounded-2xl border border-white/5">
@@ -149,7 +159,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </div>
           <div className="mt-3 text-2xl font-bold font-display text-white">₹{totalVolume.toFixed(2)}</div>
           <div className="mt-1 text-[10px] text-slate-400">
-            {successfulOrders.length} successful settlements
+            {successfulOrders.length} settlements
           </div>
         </div>
 
@@ -163,12 +173,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </div>
           <div className="mt-3 text-2xl font-bold font-display text-white">{successRate}%</div>
           <div className="mt-1 text-[10px] text-slate-400">
-            {orders.filter(o => o.status === 'PENDING').length} pending verification
+            {orders.filter(o => o.status === 'PENDING').length} pending
           </div>
         </div>
 
         {/* Active Accounts */}
-        <div className="glass-card p-5 rounded-2xl border border-white/5">
+        <div className="glass-card p-5 rounded-2xl border border-white/5 cursor-pointer hover:border-purple-500/30 transition" onClick={() => onNavigate('merchants')}>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Merchants</span>
             <div className="h-8 w-8 rounded-xl bg-pink-500/10 text-pink-400 flex items-center justify-center">
@@ -177,71 +187,175 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </div>
           <div className="mt-3 text-2xl font-bold font-display text-white">{activeMerchantsCount} Active</div>
           <div className="mt-1 text-[10px] text-purple-300">
-            {merchants.length} connected accounts
+            {merchants.length} connected
+          </div>
+        </div>
+
+        {/* Connected Devices (SMS Gateways) */}
+        <div className="glass-card p-5 rounded-2xl border border-white/5 cursor-pointer hover:border-cyan-500/30 transition" onClick={() => onNavigate('devices')}>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Devices</span>
+            <div className="h-8 w-8 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
+              <Smartphone className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-2xl font-bold font-display text-white">
+            {devices.length} Connected
+          </div>
+          <div className="mt-1 text-[10px] text-cyan-300 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <span className={`h-1.5 w-1.5 rounded-full ${onlineDevicesCount > 0 ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+              <span>{onlineDevicesCount} Online Gateway</span>
+            </span>
+            {devices[0] && (
+              <span className="font-mono text-[9px] text-slate-400 flex items-center gap-0.5">
+                <Battery className="h-3 w-3 text-emerald-400" />
+                {devices[0].batteryLevel ?? 100}%
+              </span>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Connected Merchants Grid Summary */}
-      <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="font-bold text-sm text-white flex items-center gap-2">
-              <Wallet className="h-4 w-4 text-purple-400" />
-              <span>Connected Merchant Accounts</span>
-            </h2>
-            <p className="text-[11px] text-slate-400">Direct settlement routes active in rotation</p>
-          </div>
-          <button
-            onClick={() => onNavigate('merchants')}
-            className="text-xs font-semibold text-purple-400 hover:text-purple-300 flex items-center gap-1"
-          >
-            <span>Manage Merchants</span>
-            <ArrowUpRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-
-        {merchants.length === 0 ? (
-          <div className="text-center py-6 border border-white/5 rounded-2xl bg-white/[0.02]">
-            <p className="text-xs text-slate-400">No merchant accounts connected yet.</p>
+      {/* 2-Column Grid for Connected Routes: Merchants & Android SMS Gateways */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Connected Merchants Card */}
+        <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-sm text-white flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-purple-400" />
+                <span>Connected Merchant Accounts</span>
+              </h2>
+              <p className="text-[11px] text-slate-400">Direct settlement routes active in rotation</p>
+            </div>
             <button
               onClick={() => onNavigate('merchants')}
-              className="mt-2 text-xs text-purple-400 hover:underline font-semibold"
+              className="text-xs font-semibold text-purple-400 hover:text-purple-300 flex items-center gap-1"
             >
-              + Connect your first merchant account →
+              <span>Manage ({merchants.length})</span>
+              <ArrowUpRight className="h-3.5 w-3.5" />
             </button>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {merchants.map((m) => {
-              const isActive = m.status === 'ACTIVE';
-              return (
-                <div
-                  key={m.id}
-                  className="rounded-2xl border border-white/10 bg-[#0b0b12]/60 p-4 flex items-center justify-between hover:border-white/20 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-center text-xs font-bold text-purple-300 font-mono">
-                      {m.provider ? m.provider.slice(0, 2).toUpperCase() : 'UPI'}
+
+          {merchants.length === 0 ? (
+            <div className="text-center py-6 border border-white/5 rounded-2xl bg-white/[0.02]">
+              <p className="text-xs text-slate-400">No merchant accounts connected yet.</p>
+              <button
+                onClick={() => onNavigate('merchants')}
+                className="mt-2 text-xs text-purple-400 hover:underline font-semibold"
+              >
+                + Connect your first merchant account →
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              {merchants.slice(0, 4).map((m) => {
+                const isActive = m.status === 'ACTIVE';
+                return (
+                  <div
+                    key={m.id}
+                    className="rounded-2xl border border-white/10 bg-[#0b0b12]/60 p-3.5 flex items-center justify-between hover:border-white/20 transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-xl bg-purple-500/10 border border-purple-500/25 flex items-center justify-center text-xs font-bold text-purple-300 font-mono">
+                        {m.provider ? m.provider.slice(0, 2).toUpperCase() : 'UPI'}
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white truncate max-w-[150px]">{m.label || m.upiId}</div>
+                        <div className="text-[10px] font-mono text-slate-400">{m.upiId}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="text-xs font-bold text-white truncate max-w-[150px]">{m.label || m.upiId}</div>
-                      <div className="text-[10px] font-mono text-slate-400">{m.upiId}</div>
+
+                    <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                      isActive 
+                        ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                        : 'bg-slate-800 text-slate-400'
+                    }`}>
+                      {isActive ? 'ROTATING' : 'PAUSED'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Connected Android SMS Gateways Card */}
+        <div className="glass-panel p-6 rounded-3xl border border-white/5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-sm text-white flex items-center gap-2">
+                <Smartphone className="h-4 w-4 text-cyan-400" />
+                <span>Connected Android SMS Gateways</span>
+              </h2>
+              <p className="text-[11px] text-slate-400">Paired phones sensing real-time bank credit SMS</p>
+            </div>
+            <button
+              onClick={() => onNavigate('devices')}
+              className="text-xs font-semibold text-cyan-400 hover:text-cyan-300 flex items-center gap-1"
+            >
+              <span>Pair Device ({devices.length})</span>
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {devices.length === 0 ? (
+            <div className="text-center py-6 border border-white/5 rounded-2xl bg-white/[0.02]">
+              <p className="text-xs text-slate-400">No Android companion devices paired yet.</p>
+              <button
+                onClick={() => onNavigate('devices')}
+                className="mt-2 text-xs text-cyan-400 hover:underline font-semibold"
+              >
+                + Pair your Android phone in 1-click →
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+              {devices.slice(0, 4).map((d) => {
+                const isOnline = d.isOnline;
+                const battery = d.batteryLevel ?? 100;
+                return (
+                  <div
+                    key={d.id}
+                    className="rounded-2xl border border-white/10 bg-[#0b0b12]/60 p-3.5 flex items-center justify-between hover:border-white/20 transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-xl bg-cyan-500/10 border border-cyan-500/25 flex items-center justify-center text-xs font-bold text-cyan-300">
+                        <Smartphone className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white truncate max-w-[150px]">{d.deviceName}</div>
+                        <div className="text-[10px] font-mono text-slate-400 flex items-center gap-2">
+                          <span>{d.pairingCode}</span>
+                          <span>•</span>
+                          <span className="text-emerald-400">{d.smsCapturedCount || 0} SMS sensed</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-900 border border-white/10 text-[10px] font-mono text-slate-300" title={`Phone Battery Level: ${battery}%`}>
+                        <Battery className={`h-3 w-3 ${battery > 20 ? 'text-emerald-400' : 'text-rose-400'}`} />
+                        <span>{battery}%</span>
+                      </div>
+
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                        isOnline 
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      }`}>
+                        {isOnline ? 'ONLINE' : 'OFFLINE'}
+                      </span>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-                  <span className={`inline-flex rounded-full px-2 py-0.5 text-[9px] font-bold ${
-                    isActive 
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                      : 'bg-slate-800 text-slate-400'
-                  }`}>
-                    {isActive ? 'ROTATING' : 'PAUSED'}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {/* Recent Orders Live Table (Full Width) */}

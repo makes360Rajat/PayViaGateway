@@ -16,6 +16,7 @@ import { PlansPricing } from './pages/plans/PlansPricing';
 import { AdminPanel } from './pages/admin/AdminPanel';
 import { ApiDocsPage } from './pages/docs/ApiDocsPage';
 import { ContactPage } from './pages/contact/ContactPage';
+import { TermsOfServicePage } from './pages/terms/TermsOfServicePage';
 import { HostedCheckout } from './pages/checkout/HostedCheckout';
 import { SubscriptionLockNotice } from './components/common/SubscriptionLockNotice';
 import { AlertTriangle, Zap, Lock } from 'lucide-react';
@@ -25,7 +26,10 @@ const getPageFromPath = (path: string, user: any): string => {
   const clean = path.toLowerCase().replace(/\/+$/, '') || '/';
   
   if (clean.startsWith('/pay/')) return 'checkout';
+  // Public merchant-only login
   if (clean === '/login' || clean === '/signin' || clean === '/auth' || clean === '/register' || clean === '/signup') return 'auth';
+  // Secret Super Admin portal — not linked anywhere in the UI
+  if (clean === '/login_super_admin' || clean === '/login_super_admin_auth') return 'admin-auth';
   if (clean === '/dashboard' || clean === '/demo') return 'dashboard';
   if (clean === '/merchants') return 'merchants';
   if (clean === '/orders') return 'orders';
@@ -37,6 +41,7 @@ const getPageFromPath = (path: string, user: any): string => {
   if (clean === '/admin') return 'admin';
   if (clean === '/docs' || clean === '/api-docs') return 'docs';
   if (clean === '/contact' || clean === '/support') return 'contact';
+  if (clean === '/terms' || clean === '/terms-of-service') return 'terms';
 
   // Root path '/' or anchor pages
   if (clean === '/' || clean === '/what' || clean === '/product' || clean === '/security' || clean === '/privacy' || clean === '/google-data' || clean === '/api') {
@@ -50,6 +55,7 @@ const getPathFromPage = (page: string): string => {
   switch (page) {
     case 'landing': return '/';
     case 'auth': return '/login';
+    case 'admin-auth': return '/login_super_admin';
     case 'dashboard': return '/dashboard';
     case 'merchants': return '/merchants';
     case 'orders': return '/orders';
@@ -61,6 +67,7 @@ const getPathFromPage = (page: string): string => {
     case 'admin': return '/admin';
     case 'docs': return '/docs';
     case 'contact': return '/contact';
+    case 'terms': return '/terms';
     default: return '/';
   }
 };
@@ -213,7 +220,7 @@ export const MainApp: React.FC = () => {
 
       <div className="flex flex-1">
         {/* Render Sidebar for authenticated workspace pages */}
-        {user && currentPage !== 'landing' && currentPage !== 'auth' && (
+        {user && currentPage !== 'landing' && currentPage !== 'auth' && currentPage !== 'admin-auth' && (
           <Sidebar
             currentPage={currentPage}
             onNavigate={handleNavigate}
@@ -227,10 +234,20 @@ export const MainApp: React.FC = () => {
           {currentPage === 'landing' && <LandingPage onNavigate={handleNavigate} />}
           
           {currentPage === 'auth' && (
-            <AuthPage 
+            <AuthPage
+              adminMode={false}
               onSuccess={(targetPage = 'dashboard') => {
                 handleNavigate(targetPage);
-              }} 
+              }}
+            />
+          )}
+
+          {currentPage === 'admin-auth' && (
+            <AuthPage
+              adminMode={true}
+              onSuccess={(targetPage = 'dashboard') => {
+                handleNavigate(targetPage);
+              }}
             />
           )}
 
@@ -246,6 +263,7 @@ export const MainApp: React.FC = () => {
           {currentPage === 'admin' && (user?.role === 'SUPER_ADMIN' ? <AdminPanel /> : <DashboardOverview onNavigate={handleNavigate} />)}
           {currentPage === 'docs' && <ApiDocsPage />}
           {currentPage === 'contact' && <ContactPage onNavigate={handleNavigate} />}
+          {currentPage === 'terms' && <TermsOfServicePage onNavigate={handleNavigate} />}
         </main>
       </div>
     </div>

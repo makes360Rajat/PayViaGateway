@@ -80,6 +80,27 @@ class MainActivity : FlutterActivity() {
                         result.error("REBIND_FAILED", e.message, null)
                     }
                 }
+                "getBatteryLevel" -> {
+                    try {
+                        val batteryManager = getSystemService(Context.BATTERY_SERVICE) as? android.os.BatteryManager
+                        var level = -1
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP && batteryManager != null) {
+                            level = batteryManager.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                        }
+                        if (level <= 0 || level > 100) {
+                            val ifilter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+                            val batteryStatus = registerReceiver(null, ifilter)
+                            val rawLevel = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1) ?: -1
+                            val scale = batteryStatus?.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1) ?: -1
+                            if (rawLevel >= 0 && scale > 0) {
+                                level = ((rawLevel.toFloat() / scale.toFloat()) * 100).toInt()
+                            }
+                        }
+                        result.success(if (level in 1..100) level else 100)
+                    } catch (e: Exception) {
+                        result.success(100)
+                    }
+                }
                 else -> {
                     result.notImplemented()
                 }

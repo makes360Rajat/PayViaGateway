@@ -328,11 +328,42 @@ try {
         if ($plan) {
             $plan['features'] = json_decode($plan['features_json'] ?? '[]', true);
             $plan['price'] = (float)$plan['price'];
+            $plan['maxMerchantAccounts'] = (int)$plan['max_merchant_accounts'];
+            $plan['maxOrdersPerDay'] = (int)$plan['max_orders_per_day'];
+            $plan['maxApiKeys'] = (int)$plan['max_api_keys'];
+            $plan['validityDays'] = (int)$plan['validity_days'];
         }
 
         $stmt = $db->prepare("SELECT * FROM subscriptions WHERE tenant_id = ? ORDER BY starts_at DESC LIMIT 1");
         $stmt->execute([$tenant['id']]);
         $subscription = $stmt->fetch();
+
+        // Calculate real-time daily orders count
+        $todayPrefix = date('Y-m-d') . '%';
+        $stmt = $db->prepare("SELECT COUNT(*) FROM orders WHERE tenant_id = ? AND created_at LIKE ?");
+        $stmt->execute([$tenant['id'], $todayPrefix]);
+        $ordersToday = (int)$stmt->fetchColumn();
+
+        if ($subscription) {
+            $subscription['ordersToday'] = $ordersToday;
+            $subscription['orders_today'] = $ordersToday;
+            $subscription['startsAt'] = $subscription['starts_at'];
+            $subscription['expiresAt'] = $subscription['expires_at'];
+            $subscription['tenantId'] = $subscription['tenant_id'];
+            $subscription['planId'] = $subscription['plan_id'];
+            $subscription['lastResetDate'] = $subscription['last_reset_date'];
+        }
+
+        // Live usage calculation
+        $stmt = $db->prepare("SELECT COUNT(*) FROM merchants WHERE tenant_id = ? AND status = 'ACTIVE'");
+        $stmt->execute([$tenant['id']]);
+        $merchantsUsed = (int)$stmt->fetchColumn();
+
+        $stmt = $db->prepare("SELECT COUNT(*) FROM api_keys WHERE tenant_id = ? AND is_active = 1");
+        $stmt->execute([$tenant['id']]);
+        $apiKeysUsed = (int)$stmt->fetchColumn();
+
+        $ordersMax = $plan ? (int)$plan['max_orders_per_day'] : ($tenant['role'] === 'SUPER_ADMIN' ? 50000 : 2000);
 
         echo json_encode([
             'status' => true,
@@ -348,7 +379,15 @@ try {
                     'createdAt' => $tenant['created_at']
                 ],
                 'plan' => $plan,
-                'subscription' => $subscription
+                'subscription' => $subscription,
+                'usage' => [
+                    'merchantsUsed' => $merchantsUsed,
+                    'merchantsMax' => $plan ? (int)$plan['max_merchant_accounts'] : 2,
+                    'apiKeysUsed' => $apiKeysUsed,
+                    'apiKeysMax' => $plan ? (int)$plan['max_api_keys'] : 2,
+                    'ordersToday' => $ordersToday,
+                    'ordersMax' => $ordersMax
+                ]
             ]
         ]);
         exit;
@@ -1148,16 +1187,23 @@ try {
                 }
             }
 
-            // Ensure device is registered
+            // Ensure device is registered and record real-time battery level
+            $batteryLevel = isset($input['batteryLevel']) ? (int)$input['batteryLevel'] : null;
             $stmt = $db->prepare("SELECT id FROM devices WHERE device_token = ?");
             $stmt->execute([$deviceToken]);
             if (!$stmt->fetch()) {
                 $devId = 'dev_' . substr(bin2hex(random_bytes(6)), 0, 8);
-                $ins = $db->prepare("INSERT INTO devices (id, tenant_id, device_name, device_token, pairing_code, is_online, last_heartbeat_at, sms_captured_count, created_at) VALUES (?, 'tenant_pankaj_007', 'Android Companion Device', ?, '778899', 1, ?, 1, ?)");
-                $ins->execute([$devId, $deviceToken, gmdate('Y-m-d\TH:i:s\Z'), gmdate('Y-m-d\TH:i:s\Z')]);
+                $bat = $batteryLevel !== null ? $batteryLevel : 100;
+                $ins = $db->prepare("INSERT INTO devices (id, tenant_id, device_name, device_token, pairing_code, battery_level, is_online, last_heartbeat_at, sms_captured_count, created_at) VALUES (?, 'tenant_pankaj_007', 'Android Companion Device', ?, '778899', ?, 1, ?, 1, ?)");
+                $ins->execute([$devId, $deviceToken, $bat, gmdate('Y-m-d\TH:i:s\Z'), gmdate('Y-m-d\TH:i:s\Z')]);
             } else {
-                $upd = $db->prepare("UPDATE devices SET is_online = 1, last_heartbeat_at = ?, sms_captured_count = sms_captured_count + 1 WHERE device_token = ?");
-                $upd->execute([gmdate('Y-m-d\TH:i:s\Z'), $deviceToken]);
+                if ($batteryLevel !== null) {
+                    $upd = $db->prepare("UPDATE devices SET is_online = 1, battery_level = ?, last_heartbeat_at = ?, sms_captured_count = sms_captured_count + 1 WHERE device_token = ?");
+                    $upd->execute([$batteryLevel, gmdate('Y-m-d\TH:i:s\Z'), $deviceToken]);
+                } else {
+                    $upd = $db->prepare("UPDATE devices SET is_online = 1, last_heartbeat_at = ?, sms_captured_count = sms_captured_count + 1 WHERE device_token = ?");
+                    $upd->execute([gmdate('Y-m-d\TH:i:s\Z'), $deviceToken]);
+                }
             }
 
             echo json_encode([
@@ -1337,6 +1383,10 @@ try {
             if ($plan) {
                 $plan['features'] = json_decode($plan['features_json'] ?? '[]', true);
                 $plan['price'] = (float)$plan['price'];
+                $plan['maxMerchantAccounts'] = (int)$plan['max_merchant_accounts'];
+                $plan['maxOrdersPerDay'] = (int)$plan['max_orders_per_day'];
+                $plan['maxApiKeys'] = (int)$plan['max_api_keys'];
+                $plan['validityDays'] = (int)$plan['validity_days'];
             }
 
             $stmt = $db->prepare("SELECT * FROM subscriptions WHERE tenant_id = ? ORDER BY starts_at DESC LIMIT 1");
@@ -1357,6 +1407,18 @@ try {
             $stmt->execute([$tenant['id'], $todayPrefix]);
             $ordersToday = (int)$stmt->fetchColumn();
 
+            if ($subscription) {
+                $subscription['ordersToday'] = $ordersToday;
+                $subscription['orders_today'] = $ordersToday;
+                $subscription['startsAt'] = $subscription['starts_at'];
+                $subscription['expiresAt'] = $subscription['expires_at'];
+                $subscription['tenantId'] = $subscription['tenant_id'];
+                $subscription['planId'] = $subscription['plan_id'];
+                $subscription['lastResetDate'] = $subscription['last_reset_date'];
+            }
+
+            $ordersMax = $plan ? (int)$plan['max_orders_per_day'] : ($tenant['role'] === 'SUPER_ADMIN' ? 50000 : 2000);
+
             echo json_encode([
                 'status' => true,
                 'data' => [
@@ -1368,7 +1430,7 @@ try {
                         'apiKeysUsed' => $apiKeysUsed,
                         'apiKeysMax' => $plan ? (int)$plan['max_api_keys'] : 2,
                         'ordersToday' => $ordersToday,
-                        'ordersMax' => $plan ? (int)$plan['max_orders_per_day'] : 100
+                        'ordersMax' => $ordersMax
                     ]
                 ]
             ]);

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import payviaLogo from '../../assets/payvia_logo_white_text.png';
 import { 
   ShieldCheck, 
   User, 
@@ -23,7 +24,13 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggleMobileMenu }) => {
-  const { user, plan, logout } = useAuth();
+  const { user, plan, subscription, usage, refreshProfile, logout } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      refreshProfile();
+    }
+  }, [currentPage]);
 
   const handleScrollToOrNavigate = (sectionId: string) => {
     if (currentPage !== 'landing') {
@@ -31,19 +38,24 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
       setTimeout(() => {
         const el = document.getElementById(sectionId);
         if (el) el.scrollIntoView({ behavior: 'smooth' });
-      }, 150);
+      }, 100);
     } else {
       const el = document.getElementById(sectionId);
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
   };
 
+  const ordersToday = usage?.ordersToday ?? subscription?.ordersToday ?? (subscription as any)?.orders_today ?? 0;
+  const ordersMax = usage?.ordersMax ?? plan?.maxOrdersPerDay ?? (plan as any)?.max_orders_per_day ?? (user?.role === 'SUPER_ADMIN' ? '∞' : 2000);
+  const maxNum = typeof ordersMax === 'number' ? ordersMax : (typeof ordersMax === 'string' && !isNaN(Number(ordersMax)) ? Number(ordersMax) : 2000);
+  const progressPercent = Math.min(100, Math.max(6, Math.round((Number(ordersToday) / (maxNum || 1)) * 100)));
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-emerald-500/15 bg-[#040f0c]/95 backdrop-blur-xl">
-      <div className="flex min-h-[4.75rem] items-center justify-between px-4 sm:px-6 lg:px-8 py-2">
+    <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#070b14]/90 backdrop-blur-xl transition-all duration-300">
+      <div className="flex h-16 sm:h-20 w-full items-center justify-between px-4 sm:px-6 lg:px-8">
         
-        {/* Left: Mobile Menu Toggle & Brand */}
-        <div className="flex items-center gap-4">
+        {/* Left: Brand Identity / Mobile Hamburger */}
+        <div className="flex items-center gap-3 sm:gap-4">
           {user && (
             <button
               onClick={() => {
@@ -57,8 +69,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
           )}
 
           <div className="flex flex-col cursor-pointer group justify-center py-1" onClick={() => onNavigate(user ? 'dashboard' : 'landing')}>
-            <img src="/payvia_logo_white_text.png" alt="PayVia360 Logo" className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:scale-105 transition duration-300 drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]" />
-            <span className="text-[8px] sm:text-[9.5px] text-emerald-400 font-mono font-bold tracking-widest uppercase mt-0.5">PAYMENT-SETTLEMENT ENGINE</span>
+            <img src={payviaLogo} alt="PayVia360 Logo" className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:scale-105 transition duration-300 drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]" />
           </div>
         </div>
 
@@ -132,39 +143,45 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
                 </button>
               )}
 
-              {/* Documentation link for signed-in users */}
-              <button
-                onClick={() => onNavigate('docs')}
-                className={`hidden md:flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition ${
-                  currentPage === 'docs'
-                    ? 'bg-emerald-600/30 border-emerald-500/60 text-white shadow-glow'
-                    : 'bg-slate-900/80 border-white/10 text-slate-200 hover:border-emerald-500/40 hover:text-white'
-                }`}
-              >
-                <BookOpen className="h-4 w-4 text-emerald-400" />
-                <span>Docs</span>
-              </button>
-
-              {/* My Profile Button */}
-              <button
-                onClick={() => onNavigate('profile')}
-                className={`hidden sm:flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-semibold transition active:scale-95 ${
-                  currentPage === 'profile'
-                    ? 'bg-purple-600/30 border-purple-500/60 text-white shadow-glow'
-                    : 'bg-slate-900/80 border-white/10 text-slate-200 hover:border-purple-500/40 hover:text-white'
-                }`}
-              >
-                <User className="h-4 w-4 text-purple-400" />
-                <span>My Profile</span>
-              </button>
-
-              {/* Plan Badge */}
+              {/* Creative & Dynamic Package / Daily Orders Quota Card */}
               <div 
                 onClick={() => onNavigate('plans')}
-                className="hidden md:flex items-center gap-1.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20 cursor-pointer transition shadow-glow-amber"
+                className="group relative flex flex-col justify-center rounded-2xl border border-amber-500/35 bg-[#101422]/90 backdrop-blur-md px-3.5 py-1.5 shadow-glow-amber cursor-pointer hover:border-amber-400/60 hover:bg-[#151a2e] transition-all duration-300 select-none"
+                title="View Subscription Plans & Daily Quota"
               >
-                <Sparkles className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
-                <span>{plan?.name || 'Active Plan'}</span>
+                {/* Top Row: Plan Name + Pulsing Active Indicator */}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+                    <span className="text-[11.5px] font-extrabold text-amber-300 font-display tracking-wide group-hover:text-amber-200 transition">
+                      {plan?.name || (user?.role === 'SUPER_ADMIN' ? 'Enterprise VIP' : 'Pro Plan')}
+                    </span>
+                  </div>
+                  <span className="flex items-center gap-1 text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                    ACTIVE
+                  </span>
+                </div>
+
+                {/* Bottom Row: Daily Orders Quota */}
+                <div className="mt-1 flex items-center justify-between gap-3 text-[10px] font-mono">
+                  <span className="text-slate-400 font-sans font-medium text-[10px]">Daily Orders Quota</span>
+                  <span className="font-bold text-white tracking-wider">
+                    <span className="text-emerald-400 font-bold">{ordersToday}</span>
+                    <span className="text-slate-500 mx-1">/</span>
+                    <span className="text-amber-200 font-bold">{ordersMax}</span>
+                  </span>
+                </div>
+
+                {/* Mini Dynamic Animated Progress Bar */}
+                <div className="mt-1.5 h-1 w-full bg-slate-800/80 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 rounded-full transition-all duration-500 shadow-sm"
+                    style={{ 
+                      width: `${progressPercent}%` 
+                    }}
+                  />
+                </div>
               </div>
 
               {/* User Dropdown / Controls */}

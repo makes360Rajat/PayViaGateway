@@ -95,6 +95,8 @@ export interface PairedDevice {
   createdAt: string;
 }
 
+export type Device = PairedDevice;
+
 export interface ApiKey {
   id: string;
   tenantId: string;

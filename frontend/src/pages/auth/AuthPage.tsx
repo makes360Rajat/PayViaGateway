@@ -1,16 +1,21 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import payviaLogo from '../../assets/payvia_logo_white_text.png';
 import { Lock, Mail, ArrowRight, Building2, ShieldAlert } from 'lucide-react';
 
 interface AuthPageProps {
   onSuccess: (targetPage?: string) => void;
+  /** When true, shows the Super Admin tab. Never set this on the public /login route. */
+  adminMode?: boolean;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
+export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess, adminMode = false }) => {
   const { login, register } = useAuth();
-  const [accountType, setAccountType] = useState<'MERCHANT' | 'ADMIN'>('MERCHANT');
+
+  // In admin mode start on ADMIN tab; otherwise always MERCHANT
+  const [accountType, setAccountType] = useState<'MERCHANT' | 'ADMIN'>(adminMode ? 'ADMIN' : 'MERCHANT');
   const [isLogin, setIsLogin] = useState(true);
-  
+
   // Form fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -23,119 +28,113 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
     setIsLoading(true);
+    setError(null);
 
-    if (isLogin) {
-      const res = await login(email, password);
-      setIsLoading(false);
-      if (res.success) {
-        if (accountType === 'ADMIN' || res.user?.role === 'SUPER_ADMIN') {
-          onSuccess('admin');
+    try {
+      if (isLogin) {
+        const res = await login(email, password);
+        if (res.success) {
+          if (accountType === 'ADMIN' || res.user?.role === 'SUPER_ADMIN') {
+            onSuccess('admin');
+          } else {
+            onSuccess('dashboard');
+          }
         } else {
-          onSuccess('dashboard');
+          setError(res.error || 'Invalid email or password');
         }
       } else {
-        setError(res.error || 'Invalid credentials');
+        const res = await register({
+          email,
+          password,
+          name,
+          businessName,
+          phone
+        });
+        if (res.success) {
+          onSuccess('plans');
+        } else {
+          setError(res.error || 'Registration failed');
+        }
       }
-    } else {
-      const res = await register({ name, email, password, businessName, phone });
+    } catch (err: any) {
+      setError(err.message || 'Authentication error occurred');
+    } finally {
       setIsLoading(false);
-      if (res.success) {
-        // Direct new registrations immediately to Plans Window
-        onSuccess('plans');
-      } else {
-        setError(res.error || 'Registration failed');
-      }
     }
   };
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-[#090d16]">
-      <div className="w-full max-w-md">
-        
-        {/* Account Type Selector Banner (Secure - No Credentials Displayed) */}
-        <div className="mb-5 glass-card p-3 rounded-2xl border border-white/10 text-xs shadow-glow">
-          <div className="flex items-center justify-between text-slate-400 mb-2 px-1">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Account Access Type:</span>
-            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-              accountType === 'MERCHANT' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-            }`}>
-              {accountType === 'MERCHANT' ? 'MERCHANT PORTAL' : 'SUPER ADMIN ROOT'}
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => { setAccountType('MERCHANT'); setError(null); }}
-              className={`rounded-xl p-2.5 text-left transition flex items-center gap-2.5 ${
-                accountType === 'MERCHANT'
-                  ? 'bg-indigo-600/30 border border-indigo-500/50 shadow-glow text-white'
-                  : 'bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
-            >
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-                accountType === 'MERCHANT' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-800 text-slate-500'
-              }`}>
-                <Building2 className="h-4 w-4" />
-              </div>
-              <div>
-                <div className="font-bold text-[12px] leading-tight">Merchant Account</div>
-                <div className="text-[10px] text-slate-400">Gateway & Settlements</div>
-              </div>
-            </button>
+    <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-4 py-12">
+      <div className="w-full max-w-md space-y-6">
 
-            <button
-              type="button"
-              onClick={() => { setAccountType('ADMIN'); setError(null); }}
-              className={`rounded-xl p-2.5 text-left transition flex items-center gap-2.5 ${
-                accountType === 'ADMIN'
-                  ? 'bg-purple-600/30 border border-purple-500/50 shadow-glow text-white'
-                  : 'bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
-            >
-              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-                accountType === 'ADMIN' ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-800 text-slate-500'
-              }`}>
-                <ShieldAlert className="h-4 w-4" />
-              </div>
-              <div>
-                <div className="font-bold text-[12px] leading-tight">Super Admin</div>
-                <div className="text-[10px] text-slate-400">Platform Governance</div>
-              </div>
-            </button>
+        {/* Account Type Selector — only shown in adminMode */}
+        {adminMode && (
+          <div className="bg-[#0e131f]/80 p-1.5 rounded-2xl border border-white/10 shadow-xl backdrop-blur-md">
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                type="button"
+                onClick={() => { setAccountType('MERCHANT'); setError(null); }}
+                className={`flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                  accountType === 'MERCHANT'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-lg shadow-emerald-900/30 scale-[1.02]'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className={`p-1 rounded-lg ${accountType === 'MERCHANT' ? 'bg-white/20' : 'bg-slate-800'}`}>
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-[12px] leading-tight">Merchant</div>
+                  <div className="text-[10px] text-slate-400">Payment Gateway</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => { setAccountType('ADMIN'); setError(null); }}
+                className={`flex items-center justify-center gap-2.5 py-3 px-4 rounded-xl text-xs font-semibold transition-all duration-300 ${
+                  accountType === 'ADMIN'
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-900/30 scale-[1.02]'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className={`p-1 rounded-lg ${accountType === 'ADMIN' ? 'bg-white/20' : 'bg-slate-800'}`}>
+                  <ShieldAlert className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-bold text-[12px] leading-tight">Super Admin</div>
+                  <div className="text-[10px] text-slate-400">Platform Governance</div>
+                </div>
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Auth Card */}
         <div className="glass-panel p-8 rounded-3xl border border-white/10 shadow-2xl">
-          
+
           <div className="text-center mb-6">
-            <img src="/payvia_logo_white_text.png" alt="PayVia360 Logo" className="h-16 sm:h-20 w-auto mx-auto mb-2 object-contain drop-shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-transform hover:scale-105" />
-            <p className="text-[10px] sm:text-[11px] text-emerald-400 font-mono font-bold tracking-widest uppercase mb-3">PAYMENT-SETTLEMENT ENGINE</p>
-            <h1 className="font-display text-xl font-bold text-white">
-              {isLogin ? (accountType === 'ADMIN' ? 'Super Admin Portal' : 'Welcome Back') : 'Create Merchant Account'}
-            </h1>
-            <p className="mt-1 text-xs text-slate-400">
-              {isLogin 
-                ? (accountType === 'ADMIN' ? 'Enter administrator credentials for root governance' : 'Sign in to access your merchant payment workspace') 
-                : 'Launch your direct settlement gateway in seconds'}
-            </p>
+            <img src={payviaLogo} alt="PayVia360 Logo" className="h-16 sm:h-20 w-auto mx-auto mb-2 object-contain drop-shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-transform hover:scale-105" />
+            {accountType === 'ADMIN' && isLogin && (
+              <h1 className="font-display text-xl font-bold text-white">Super Admin Portal</h1>
+            )}
           </div>
 
-          {/* Tab Switcher */}
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-900/80 p-1 border border-white/5 mb-6 text-xs font-semibold">
+          {/* Tab Switcher — hide Register tab in admin mode */}
+          <div className={`grid gap-1 rounded-xl bg-slate-900/80 p-1 border border-white/5 mb-6 text-xs font-semibold ${adminMode ? 'grid-cols-2' : 'grid-cols-2'}`}>
             <button
               onClick={() => { setIsLogin(true); setError(null); }}
               className={`rounded-lg py-2 transition ${isLogin ? 'bg-indigo-600 text-white shadow-glow' : 'text-slate-400 hover:text-white'}`}
             >
               Sign In
             </button>
+            {/* Register tab is always visible on public /login; hidden on admin portal if desired */}
             <button
               onClick={() => { setIsLogin(false); setAccountType('MERCHANT'); setError(null); }}
               className={`rounded-lg py-2 transition ${!isLogin ? 'bg-indigo-600 text-white shadow-glow' : 'text-slate-400 hover:text-white'}`}
             >
-              Register Merchant
+              {adminMode ? 'Merchant Register' : 'Register Merchant'}
             </button>
           </div>
 
@@ -217,6 +216,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
             </button>
           </form>
         </div>
+
+        {/* Subtle security note on admin portal */}
+        {adminMode && (
+          <p className="text-center text-[10px] text-slate-700 font-mono">
+            Restricted access · Unauthorized use is prohibited
+          </p>
+        )}
       </div>
     </div>
   );

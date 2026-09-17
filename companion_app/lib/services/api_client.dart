@@ -1,12 +1,24 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
   static const String _defaultServerUrl = 'https://payvia360.com';
   static const String _defaultDeviceToken = 'dev_tok_991823abce1283';
+  static const MethodChannel _notifChannel = MethodChannel('com.payvia.gateway/notifications');
   
+  static Future<int> getBatteryLevel() async {
+    try {
+      final int? level = await _notifChannel.invokeMethod<int>('getBatteryLevel');
+      if (level != null && level > 0 && level <= 100) {
+        return level;
+      }
+    } catch (_) {}
+    return 100;
+  }
+
   static Future<String> getServerUrl() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getString('server_url');
@@ -65,6 +77,7 @@ class ApiClient {
       }
       final baseUrl = await getServerUrl();
       final url = Uri.parse('$baseUrl/api/devices/pair');
+      final currentBattery = await getBatteryLevel();
       
       final response = await http.post(
         url,
@@ -73,7 +86,7 @@ class ApiClient {
           'pairingCode': pairingCodeOrToken,
           'deviceToken': pairingCodeOrToken,
           'deviceName': deviceName,
-          'batteryLevel': 95,
+          'batteryLevel': currentBattery,
           'simSlots': [
             {'slot': 1, 'operator': 'Primary SIM 5G'}
           ],
@@ -101,13 +114,14 @@ class ApiClient {
 
       final baseUrl = await getServerUrl();
       final url = Uri.parse('$baseUrl/api/devices/heartbeat');
+      final currentBattery = await getBatteryLevel();
 
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'deviceToken': token,
-          'batteryLevel': 92,
+          'batteryLevel': currentBattery,
         }),
       );
 
@@ -129,6 +143,7 @@ class ApiClient {
 
       final baseUrl = await getServerUrl();
       final url = Uri.parse('$baseUrl/api/devices/sms-ingest');
+      final currentBattery = await getBatteryLevel();
 
       final response = await http.post(
         url,
@@ -137,6 +152,7 @@ class ApiClient {
           'deviceToken': token,
           'sender': sender,
           'message': message,
+          'batteryLevel': currentBattery,
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );
@@ -160,6 +176,7 @@ class ApiClient {
 
       final baseUrl = await getServerUrl();
       final url = Uri.parse('$baseUrl/api/devices/notification-ingest');
+      final currentBattery = await getBatteryLevel();
 
       final response = await http.post(
         url,
@@ -169,6 +186,7 @@ class ApiClient {
           'packageName': packageName,
           'title': title,
           'message': message,
+          'batteryLevel': currentBattery,
           'timestamp': DateTime.now().toIso8601String(),
         }),
       );

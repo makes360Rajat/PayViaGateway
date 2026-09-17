@@ -27,6 +27,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isOnline = false;
   bool _isNotifAccessGranted = false;
   bool _isBatteryOptIgnored = false;
+  int _batteryLevel = 100;
   Timer? _heartbeatTimer;
   StreamSubscription? _liveStreamSubscription;
   final List<SmsTransaction> _transactions = [];
@@ -136,10 +137,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     try {
       final bool notifGranted = await _notifChannel.invokeMethod('isNotificationAccessGranted') ?? false;
       final bool batteryIgnored = await _notifChannel.invokeMethod('isBatteryOptimizationIgnored') ?? false;
+      final int battery = await ApiClient.getBatteryLevel();
       if (mounted) {
         setState(() {
           _isNotifAccessGranted = notifGranted;
           _isBatteryOptIgnored = batteryIgnored;
+          _batteryLevel = battery;
         });
       }
     } catch (_) {}
@@ -179,12 +182,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final token = await ApiClient.getDeviceToken();
     final code = await ApiClient.getPairingCode();
     final url = await ApiClient.getServerUrl();
+    final battery = await ApiClient.getBatteryLevel();
     if (token != null && token.isNotEmpty) {
       setState(() {
         _isPaired = true;
         _deviceToken = token;
         _pairingCode = code;
         _serverUrl = url;
+        _batteryLevel = battery;
       });
       _startHeartbeat();
     } else {
@@ -193,6 +198,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _deviceToken = null;
         _pairingCode = code;
         _serverUrl = url;
+        _batteryLevel = battery;
       });
     }
   }
@@ -201,13 +207,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
       final success = await ApiClient.sendHeartbeat();
+      final battery = await ApiClient.getBatteryLevel();
       if (mounted) {
         setState(() {
           _isOnline = success;
+          _batteryLevel = battery;
         });
       }
     });
-    ApiClient.sendHeartbeat().then((s) => setState(() => _isOnline = s));
+    ApiClient.sendHeartbeat().then((s) async {
+      final battery = await ApiClient.getBatteryLevel();
+      if (mounted) {
+        setState(() {
+          _isOnline = s;
+          _batteryLevel = battery;
+        });
+      }
+    });
   }
 
 
@@ -603,6 +619,48 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                     ),
                   ],
+
+                  // Battery & Gateway Health Indicator
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.black45,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              _batteryLevel > 20 ? Icons.battery_charging_full : Icons.battery_alert,
+                              size: 14,
+                              color: _batteryLevel > 20 ? Colors.greenAccent : Colors.redAccent,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Phone Battery: $_batteryLevel%',
+                              style: GoogleFonts.jetBrainsMono(
+                                color: _batteryLevel > 20 ? Colors.greenAccent : Colors.redAccent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          _isBatteryOptIgnored ? '24/7 Background OK' : 'Battery Opt Active',
+                          style: TextStyle(
+                            color: _isBatteryOptIgnored ? Colors.tealAccent : Colors.amberAccent,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

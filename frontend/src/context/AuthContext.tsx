@@ -2,10 +2,20 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserTenant, Plan, TenantSubscription } from '../types';
 import { ApiService } from '../services/api';
 
+export interface QuotaUsage {
+  ordersToday: number;
+  ordersMax: number;
+  merchantsUsed?: number;
+  merchantsMax?: number;
+  apiKeysUsed?: number;
+  apiKeysMax?: number;
+}
+
 interface AuthContextType {
   user: UserTenant | null;
   plan: Plan | null;
   subscription: TenantSubscription | null;
+  usage: QuotaUsage | null;
   token: string | null;
   isLoading: boolean;
   isImpersonating: boolean;
@@ -24,6 +34,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<UserTenant | null>(null);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [subscription, setSubscription] = useState<TenantSubscription | null>(null);
+  const [usage, setUsage] = useState<QuotaUsage | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('payvia_token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isImpersonating, setIsImpersonating] = useState<boolean>(() => !!localStorage.getItem('payvia_original_admin_token'));
@@ -36,11 +47,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const res = await ApiService.getProfile();
-      if (res.status && res.data) {
-        setUser(res.data.tenant);
-        setPlan(res.data.plan);
-        setSubscription(res.data.subscription);
+      const [profileRes, subRes] = await Promise.all([
+        ApiService.getProfile(),
+        ApiService.getCurrentSubscription()
+      ]);
+
+      if (profileRes.status && profileRes.data) {
+        setUser(profileRes.data.tenant);
+        
+        const activePlan = profileRes.data.plan || (subRes.status ? subRes.data?.plan : null);
+        setPlan(activePlan);
+        
+        const sub = (subRes.status && subRes.data?.subscription) 
+          ? subRes.data.subscription 
+          : profileRes.data.subscription;
+          
+        const usageData = (subRes.status && subRes.data?.usage) 
+          ? subRes.data.usage 
+          : profileRes.data.usage;
+
+        if (sub) {
+          const ordCount = usageData?.ordersToday ?? sub.ordersToday ?? (sub as any).orders_today ?? 0;
+          sub.ordersToday = Number(ordCount);
+        }
+        setSubscription(sub);
+        
+        if (usageData) {
+          setUsage(usageData);
+        }
       } else {
         logout();
       }
@@ -53,6 +87,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshProfile();
+
+    const interval = setInterval(() => {
+      if (localStorage.getItem('payvia_token')) {
+        refreshProfile();
+      }
+    }, 10000);
+
+    const onFocus = () => {
+      if (localStorage.getItem('payvia_token')) {
+        refreshProfile();
+      }
+    };
+
+    const onCustomRefresh = () => {
+      if (localStorage.getItem('payvia_token')) {
+        refreshProfile();
+      }
+    };
+
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('payvia_quota_refresh', onCustomRefresh);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('payvia_quota_refresh', onCustomRefresh);
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -124,6 +185,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(null);
     setPlan(null);
     setSubscription(null);
+    setUsage(null);
     setIsImpersonating(false);
     setImpersonatedBy(null);
   };
@@ -134,6 +196,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         plan,
         subscription,
+        usage,
         token,
         isLoading,
         isImpersonating,

@@ -8,7 +8,6 @@ import {
   CheckCircle2, 
   ExternalLink,
   Sparkles,
-  Phone,
   Clock,
   HelpCircle,
   ArrowRight,
@@ -67,18 +66,18 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#040f0c] text-emerald-50 py-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-12">
+    <div className="min-h-screen bg-[#040f0c] text-emerald-50 pt-4 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto space-y-8">
       
       {/* Hero Header */}
-      <div className="text-center space-y-4 max-w-3xl mx-auto pt-6">
+      <div className="text-center space-y-3 max-w-3xl mx-auto">
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/35 bg-emerald-500/10 px-4 py-1.5 text-xs font-semibold text-emerald-300 backdrop-blur-md shadow-glow">
           <Headphones className="h-4 w-4 text-emerald-400" />
-          <span>PayVia Developer & Merchant Support</span>
+          <span>PayVia Developer &amp; Merchant Support</span>
         </div>
-        <h1 className="font-display text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-          Contact Our Engineering & Support Team
+        <h1 className="font-display text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
+          Contact Our Engineering &amp; Support Team
         </h1>
-        <p className="text-emerald-200/80 text-sm sm:text-base leading-relaxed">
+        <p className="text-emerald-200/70 text-sm leading-relaxed">
           Need help setting up your merchant routes, integrating our REST APIs, custom webhooks, or inquiring about high-volume enterprise limits? We are here 24/7.
         </p>
       </div>
@@ -87,26 +86,20 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         
         {/* Left Column: Direct Support Channels */}
-        <div className="lg:col-span-5 space-y-5">
+        <div className="lg:col-span-5 space-y-4">
           
           {/* Email Support Card */}
-          <div className="glass-panel p-6 rounded-3xl border border-emerald-500/25 space-y-3 relative overflow-hidden shadow-glow">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center justify-center">
+          <div className="glass-panel p-5 sm:p-6 rounded-3xl border border-emerald-500/25 relative overflow-hidden shadow-glow flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="h-11 w-11 shrink-0 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 flex items-center justify-center shadow-glow">
                 <Mail className="h-5 w-5" />
               </div>
-              <div>
-                <h3 className="font-bold text-base text-white">Email Support</h3>
-                <p className="text-xs text-emerald-300/70">General inquiries, accounts & integrations</p>
-              </div>
+              <h3 className="font-bold text-base text-white">Email Support</h3>
             </div>
-            <p className="text-xs text-emerald-200/80 leading-relaxed">
-              We respond to developer and merchant tickets within 1–2 business hours.
-            </p>
-            <div className="pt-2">
+            <div>
               <a 
                 href="mailto:support@payvia360.com" 
-                className="inline-flex items-center gap-2 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-3.5 py-2 rounded-xl hover:bg-emerald-500/20 transition"
+                className="inline-flex items-center gap-2 text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-4 py-2 rounded-xl hover:bg-emerald-500/20 hover:border-emerald-500/50 transition shadow-sm"
               >
                 <span>support@payvia360.com</span>
                 <ExternalLink className="h-3.5 w-3.5" />
@@ -114,57 +107,19 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onNavigate }) => {
             </div>
           </div>
 
-          {/* Telegram Live Channel */}
-          <div className="glass-panel p-6 rounded-3xl border border-cyan-500/25 bg-cyan-950/20 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 flex items-center justify-center">
+          {/* Telegram Live Channel - Coming Soon */}
+          <div className="glass-panel p-5 sm:p-6 rounded-3xl border border-cyan-500/25 bg-cyan-950/20 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="h-11 w-11 shrink-0 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 flex items-center justify-center shadow-sm">
                 <Send className="h-5 w-5" />
               </div>
-              <div>
-                <h3 className="font-bold text-base text-white">Telegram Direct Channel</h3>
-                <p className="text-xs text-cyan-300/70">Fastest real-time developer assistance</p>
-              </div>
+              <h3 className="font-bold text-base text-white">Telegram Direct Channel</h3>
             </div>
-            <p className="text-xs text-emerald-200/80 leading-relaxed">
-              Connect directly with our lead architects on Telegram for rapid onboarding and pairing help.
-            </p>
-            <div className="pt-2">
-              <a 
-                href="https://t.me/makes360" 
-                target="_blank" 
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 text-xs font-mono font-bold text-cyan-400 bg-cyan-500/10 border border-cyan-500/30 px-3.5 py-2 rounded-xl hover:bg-cyan-500/20 transition shadow-glow"
-              >
-                <span>@makes360</span>
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-            </div>
-          </div>
-
-          {/* WhatsApp / Phone Helpline */}
-          <div className="glass-panel p-6 rounded-3xl border border-lime-500/25 bg-lime-950/20 space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-lime-500/15 border border-lime-500/30 text-lime-300 flex items-center justify-center">
-                <Phone className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="font-bold text-base text-white">WhatsApp Merchant Desk</h3>
-                <p className="text-xs text-lime-300/70">Urgent settlement & pairing questions</p>
-              </div>
-            </div>
-            <p className="text-xs text-emerald-200/80 leading-relaxed">
-              Available 10:00 AM – 8:00 PM IST for Indian payment gateway merchants.
-            </p>
-            <div className="pt-2">
-              <a 
-                href="https://wa.me/919876543210" 
-                target="_blank" 
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 text-xs font-mono font-bold text-lime-400 bg-lime-500/10 border border-lime-500/30 px-3.5 py-2 rounded-xl hover:bg-lime-500/20 transition"
-              >
-                <span>+91 98765 43210</span>
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
+            <div>
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-3.5 py-1.5 rounded-xl shadow-glow">
+                <span className="h-1.5 w-1.5 rounded-full bg-cyan-400 animate-ping inline-block" />
+                Coming Soon
+              </span>
             </div>
           </div>
 
