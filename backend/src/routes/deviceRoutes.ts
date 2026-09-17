@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { db } from '../db/database';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { DetectionEngine } from '../services/detectionEngine';
+import { WebhookService } from '../services/webhookService';
 import { PairedDevice } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -240,6 +241,153 @@ router.post('/notification-ingest', async (req: Request, res: Response) => {
     matched: result.matched,
     orderId: result.orderId || null,
     message: result.message
+  });
+});
+
+// Companion App: Fetch Orders for Connected Tenant (with tabs & pagination)
+router.get('/orders', async (req: Request, res: Response) => {
+  const token = ((req.query.deviceToken as string) || (req.headers['x-device-token'] as string) || '').trim();
+  if (!token) {
+    return res.status(400).json({ status: false, error: 'deviceToken is required' });
+  }
+
+  const device = db.devices.find(d => 
+    d.deviceToken === token || 
+    (d.pairingCode && d.pairingCode.toUpperCase() === token.toUpperCase())
+  );
+
+  if (!device) {
+    return res.status(404).json({ status: false, error: 'Device not recognized or not paired' });
+  }
+
+  const tenantId = device.tenantId;
+  const { status, limit = 20, offset = 0 } = req.query;
+
+  let allTenantOrders = db.orders.filter(o => o.tenantId === tenantId);
+  allTenantOrders.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const counts = {
+    all: allTenantOrders.length,
+    verified: allTenantOrders.filter(o => o.status === 'TXN_SUCCESS').length,
+    pending: allTenantOrders.filter(o => o.status === 'PENDING').length,
+    rejected: allTenantOrders.filter(o => o.status === 'FAILED' || o.status === 'CANCELLED' || o.status === 'EXPIRED').length,
+  };
+
+  let filtered = allTenantOrders;
+  if (status && status !== 'ALL') {
+    const s = (status as string).toUpperCase();
+    if (s === 'VERIFIED' || s === 'TXN_SUCCESS') {
+      filtered = filtered.filter(o => o.status === 'TXN_SUCCESS');
+    } else if (s === 'PENDING') {
+      filtered = filtered.filter(o => o.status === 'PENDING');
+    } else if (s === 'REJECTED' || s === 'CANCELLED' || s === 'FAILED') {
+      filtered = filtered.filter(o => o.status === 'CANCELLED' || o.status === 'FAILED' || o.status === 'EXPIRED');
+    }
+  }
+
+  const total = filtered.length;
+  const sliced = filtered.slice(Number(offset), Number(offset) + Number(limit));
+
+  return res.json({
+    status: true,
+    total,
+    counts,
+    orders: sliced,
+    data: sliced,
+    pagination: {
+      total,
+      limit: Number(limit),
+      offset: Number(offset),
+      hasMore: Number(offset) + Number(limit) < total
+    }
+  });
+});
+
+// Companion App: Manually Settle / Verify Order
+router.post('/orders/:id/settle', async (req: Request, res: Response) => {
+  const { deviceToken, utr } = req.body;
+  const { id } = req.params;
+
+  if (!deviceToken) {
+    return res.status(400).json({ status: false, error: 'deviceToken is required' });
+  }
+
+  const device = db.devices.find(d => 
+    d.deviceToken === deviceToken || 
+    (d.pairingCode && d.pairingCode.toUpperCase() === deviceToken.toUpperCase())
+  );
+
+  if (!device) {
+    return res.status(404).json({ status: false, error: 'Device not recognized' });
+  }
+
+  const order = db.orders.find(o => 
+    (o.id === id || o.orderId === id) && o.tenantId === device.tenantId
+  );
+
+  if (!order) {
+    return res.status(404).json({ status: false, error: 'Order not found for this merchant' });
+  }
+
+  order.status = 'TXN_SUCCESS';
+  order.utr = utr || `MANUAL_${Date.now()}`;
+  order.paidAt = new Date().toISOString();
+  order.updatedAt = new Date().toISOString();
+  order.rawVerificationData = { 
+    matchedBy: 'COMPANION_APP_MANUAL', 
+    deviceId: device.id, 
+    deviceName: device.deviceName 
+  };
+  db.save();
+
+  // Dispatch Webhook to merchant callback
+  try {
+    await WebhookService.dispatchOrderCallback(order);
+  } catch (err) {
+    console.error('Webhook dispatch error:', err);
+  }
+
+  return res.json({ 
+    status: true, 
+    message: `Order ${order.orderId} successfully marked as SETTLED / VERIFIED`, 
+    data: order 
+  });
+});
+
+// Companion App: Manually Cancel Order
+router.post('/orders/:id/cancel', async (req: Request, res: Response) => {
+  const { deviceToken } = req.body;
+  const { id } = req.params;
+
+  if (!deviceToken) {
+    return res.status(400).json({ status: false, error: 'deviceToken is required' });
+  }
+
+  const device = db.devices.find(d => 
+    d.deviceToken === deviceToken || 
+    (d.pairingCode && d.pairingCode.toUpperCase() === deviceToken.toUpperCase())
+  );
+
+  if (!device) {
+    return res.status(404).json({ status: false, error: 'Device not recognized' });
+  }
+
+  const order = db.orders.find(o => 
+    (o.id === id || o.orderId === id) && o.tenantId === device.tenantId
+  );
+
+  if (!order) {
+    return res.status(404).json({ status: false, error: 'Order not found for this merchant' });
+  }
+
+  order.status = 'CANCELLED';
+  order.updatedAt = new Date().toISOString();
+  db.save();
+
+  return res.json({ 
+    status: true, 
+    message: `Order ${order.orderId} marked as CANCELLED`, 
+    data: order 
   });
 });
 

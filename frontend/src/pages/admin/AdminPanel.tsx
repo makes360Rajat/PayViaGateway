@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ApiService } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { formatIST } from '../../utils/dateUtils';
 import { 
   ShieldAlert, 
   Users, 
@@ -741,7 +742,7 @@ export const AdminPanel: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-4 text-emerald-400 font-bold">{o.utr || '—'}</td>
-                      <td className="p-4 text-slate-400 text-[11px] whitespace-nowrap">{new Date(o.createdAt).toLocaleString()}</td>
+                      <td className="p-4 text-slate-400 text-[11px] whitespace-nowrap">{formatIST(o.createdAt)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -895,7 +896,7 @@ export const AdminPanel: React.FC = () => {
                         </td>
 
                         <td className="p-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
-                          {inq.createdAt ? new Date(inq.createdAt).toLocaleString() : '—'}
+                          {formatIST(inq.createdAt)}
                         </td>
 
                         <td className="p-4 whitespace-nowrap">
@@ -1248,7 +1249,7 @@ export const AdminPanel: React.FC = () => {
                               </span>
                             </td>
                             <td className="p-3 text-emerald-400">{o.utr || '—'}</td>
-                            <td className="p-3 text-slate-400 text-[10px]">{new Date(o.created_at || o.createdAt).toLocaleDateString()}</td>
+                            <td className="p-3 text-slate-400 text-[10px] whitespace-nowrap">{formatIST(o.created_at || o.createdAt, { dateOnly: true })}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1421,7 +1422,7 @@ export const AdminPanel: React.FC = () => {
               </div>
               <div>
                 <span className="text-[10px] uppercase font-semibold text-slate-400 block mb-0.5">Date & Time</span>
-                <span className="text-slate-300 font-mono">{new Date(selectedInquiry.createdAt).toLocaleString()}</span>
+                <span className="text-slate-300 font-mono">{formatIST(selectedInquiry.createdAt)}</span>
               </div>
             </div>
 

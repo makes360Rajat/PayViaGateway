@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ApiService } from '../../services/api';
 import { Order, OrderStatus, PaymentProviderType } from '../../types';
 import { CreatePaymentLinkModal } from '../../components/orders/CreatePaymentLinkModal';
+import { formatIST } from '../../utils/dateUtils';
 import { 
   Receipt, 
   Search, 
@@ -266,8 +267,8 @@ export const OrdersList: React.FC = () => {
                       <div className="text-slate-300 font-medium">{o.customerName || 'Direct Payer'}</div>
                       <div className="text-[10px] text-slate-500 font-mono">{o.customerMobile || '—'}</div>
                     </td>
-                    <td className="p-4 text-[10px] text-slate-500">
-                      {new Date(o.createdAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                    <td className="p-4 text-[11px] text-slate-400 whitespace-nowrap">
+                      {formatIST(o.createdAt)}
                     </td>
                     <td className="p-4 text-right space-x-1 font-sans">
                       {(o.status === 'PENDING' || o.status === 'EXPIRED' || o.status === 'AWAITING_VERIFY') && (

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -188,6 +189,93 @@ class ApiClient {
           'message': message,
           'batteryLevel': currentBattery,
           'timestamp': DateTime.now().toIso8601String(),
+        }),
+      );
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> fetchOrders({
+    String status = 'ALL',
+    int limit = 20,
+    int offset = 0,
+  }) async {
+    try {
+      final token = await getDeviceToken();
+      if (token == null) {
+        return {'status': false, 'error': 'Device not paired'};
+      }
+
+      final baseUrl = await getServerUrl();
+      final uri = Uri.parse('$baseUrl/api/devices/orders').replace(
+        queryParameters: {
+          'deviceToken': token,
+          'status': status,
+          'limit': limit.toString(),
+          'offset': offset.toString(),
+        },
+      );
+
+      final response = await http.get(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-device-token': token,
+        },
+      );
+
+      debugPrint('>>> API URI: $uri | STATUS: ${response.statusCode} | BODY: ${response.body.length > 100 ? response.body.substring(0, 100) : response.body}');
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      debugPrint('>>> FETCH ORDERS ERR: $e');
+      return {'status': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> settleOrder(String orderId, {String? utr}) async {
+    try {
+      final token = await getDeviceToken();
+      if (token == null) {
+        return {'status': false, 'error': 'Device not paired'};
+      }
+
+      final baseUrl = await getServerUrl();
+      final url = Uri.parse('$baseUrl/api/devices/orders/$orderId/settle');
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'deviceToken': token,
+          if (utr != null && utr.isNotEmpty) 'utr': utr,
+        }),
+      );
+
+      return jsonDecode(response.body);
+    } catch (e) {
+      return {'status': false, 'error': e.toString()};
+    }
+  }
+
+  static Future<Map<String, dynamic>> cancelOrder(String orderId) async {
+    try {
+      final token = await getDeviceToken();
+      if (token == null) {
+        return {'status': false, 'error': 'Device not paired'};
+      }
+
+      final baseUrl = await getServerUrl();
+      final url = Uri.parse('$baseUrl/api/devices/orders/$orderId/cancel');
+
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'deviceToken': token,
         }),
       );
 

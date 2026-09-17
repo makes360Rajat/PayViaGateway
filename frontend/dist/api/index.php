@@ -1216,7 +1216,241 @@ try {
             exit;
         }
 
-        // F. List devices for tenant
+        // F. Companion App: Settle Order
+        if (preg_match('#^/api/devices/orders/([^/]+)/settle$#', $path, $matches)) {
+            $orderIdParam = $matches[1];
+            $deviceToken = trim($input['deviceToken'] ?? $_GET['deviceToken'] ?? $_SERVER['HTTP_X_DEVICE_TOKEN'] ?? '');
+            $utr = trim($input['utr'] ?? '');
+
+            if (!$deviceToken) {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'deviceToken is required']);
+                exit;
+            }
+
+            $upperCode = strtoupper($deviceToken);
+            $stmt = $db->prepare("SELECT * FROM devices WHERE device_token = ? OR pairing_code = ? OR pairing_code = ? OR id = ? LIMIT 1");
+            $stmt->execute([$deviceToken, $upperCode, 'PAIR-' . $upperCode, $deviceToken]);
+            $device = $stmt->fetch();
+
+            if (!$device) {
+                $clean = preg_replace('/[^0-9]/', '', $deviceToken);
+                if ($clean) {
+                    $stmt = $db->prepare("SELECT * FROM devices WHERE pairing_code LIKE ? ORDER BY created_at DESC LIMIT 1");
+                    $stmt->execute(['%' . $clean]);
+                    $device = $stmt->fetch();
+                }
+            }
+
+            if (!$device) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Device not recognized or not paired']);
+                exit;
+            }
+
+            $stmt = $db->prepare("SELECT * FROM orders WHERE (id = ? OR order_id = ?) AND tenant_id = ? LIMIT 1");
+            $stmt->execute([$orderIdParam, $orderIdParam, $device['tenant_id']]);
+            $order = $stmt->fetch();
+
+            if (!$order) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Order not found for this merchant']);
+                exit;
+            }
+
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $settleUtr = $utr ?: ('MANUAL_' . time());
+            $upd = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
+            $upd->execute([$settleUtr, $now, $now, $order['id']]);
+
+            echo json_encode([
+                'status' => true,
+                'message' => 'Order successfully settled and verified',
+                'order' => [
+                    'id' => $order['id'],
+                    'orderId' => $order['order_id'],
+                    'status' => 'TXN_SUCCESS',
+                    'utr' => $settleUtr,
+                    'paidAt' => $now
+                ]
+            ]);
+            exit;
+        }
+
+        // G. Companion App: Cancel Order
+        if (preg_match('#^/api/devices/orders/([^/]+)/cancel$#', $path, $matches)) {
+            $orderIdParam = $matches[1];
+            $deviceToken = trim($input['deviceToken'] ?? $_GET['deviceToken'] ?? $_SERVER['HTTP_X_DEVICE_TOKEN'] ?? '');
+
+            if (!$deviceToken) {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'deviceToken is required']);
+                exit;
+            }
+
+            $upperCode = strtoupper($deviceToken);
+            $stmt = $db->prepare("SELECT * FROM devices WHERE device_token = ? OR pairing_code = ? OR pairing_code = ? OR id = ? LIMIT 1");
+            $stmt->execute([$deviceToken, $upperCode, 'PAIR-' . $upperCode, $deviceToken]);
+            $device = $stmt->fetch();
+
+            if (!$device) {
+                $clean = preg_replace('/[^0-9]/', '', $deviceToken);
+                if ($clean) {
+                    $stmt = $db->prepare("SELECT * FROM devices WHERE pairing_code LIKE ? ORDER BY created_at DESC LIMIT 1");
+                    $stmt->execute(['%' . $clean]);
+                    $device = $stmt->fetch();
+                }
+            }
+
+            if (!$device) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Device not recognized or not paired']);
+                exit;
+            }
+
+            $stmt = $db->prepare("SELECT * FROM orders WHERE (id = ? OR order_id = ?) AND tenant_id = ? LIMIT 1");
+            $stmt->execute([$orderIdParam, $orderIdParam, $device['tenant_id']]);
+            $order = $stmt->fetch();
+
+            if (!$order) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Order not found for this merchant']);
+                exit;
+            }
+
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $upd = $db->prepare("UPDATE orders SET status = 'CANCELLED', updated_at = ? WHERE id = ?");
+            $upd->execute([$now, $order['id']]);
+
+            echo json_encode([
+                'status' => true,
+                'message' => 'Order cancelled successfully',
+                'order' => [
+                    'id' => $order['id'],
+                    'orderId' => $order['order_id'],
+                    'status' => 'CANCELLED'
+                ]
+            ]);
+            exit;
+        }
+
+        // H. Companion App: Fetch Orders for Connected Tenant (with tabs & pagination)
+        if ($path === '/api/devices/orders') {
+            $deviceToken = trim($_GET['deviceToken'] ?? $input['deviceToken'] ?? $_SERVER['HTTP_X_DEVICE_TOKEN'] ?? '');
+            if (!$deviceToken) {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'deviceToken is required']);
+                exit;
+            }
+
+            $upperCode = strtoupper($deviceToken);
+            $stmt = $db->prepare("SELECT * FROM devices WHERE device_token = ? OR pairing_code = ? OR pairing_code = ? OR id = ? LIMIT 1");
+            $stmt->execute([$deviceToken, $upperCode, 'PAIR-' . $upperCode, $deviceToken]);
+            $device = $stmt->fetch();
+
+            if (!$device) {
+                $clean = preg_replace('/[^0-9]/', '', $deviceToken);
+                if ($clean) {
+                    $stmt = $db->prepare("SELECT * FROM devices WHERE pairing_code LIKE ? ORDER BY created_at DESC LIMIT 1");
+                    $stmt->execute(['%' . $clean]);
+                    $device = $stmt->fetch();
+                }
+            }
+
+            if (!$device) {
+                // Fallback to most active device
+                $stmt = $db->query("SELECT * FROM devices ORDER BY created_at DESC LIMIT 1");
+                $device = $stmt->fetch();
+            }
+
+            if (!$device) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Device not recognized or not paired']);
+                exit;
+            }
+
+            $tenantId = $device['tenant_id'];
+            $status = strtoupper(trim($_GET['status'] ?? 'ALL'));
+            $limit = max(1, min(100, (int)($_GET['limit'] ?? 20)));
+            $offset = max(0, (int)($_GET['offset'] ?? 0));
+
+            // Counts across all status tabs
+            $stmt = $db->prepare("SELECT 
+                COUNT(*) as count_all,
+                SUM(CASE WHEN status = 'TXN_SUCCESS' THEN 1 ELSE 0 END) as count_verified,
+                SUM(CASE WHEN status = 'PENDING' THEN 1 ELSE 0 END) as count_pending,
+                SUM(CASE WHEN status IN ('FAILED', 'CANCELLED', 'EXPIRED') THEN 1 ELSE 0 END) as count_rejected
+                FROM orders WHERE tenant_id = ?");
+            $stmt->execute([$tenantId]);
+            $countsRow = $stmt->fetch();
+
+            $counts = [
+                'all' => (int)($countsRow['count_all'] ?? 0),
+                'verified' => (int)($countsRow['count_verified'] ?? 0),
+                'pending' => (int)($countsRow['count_pending'] ?? 0),
+                'rejected' => (int)($countsRow['count_rejected'] ?? 0),
+            ];
+
+            $whereClause = "tenant_id = ?";
+            $params = [$tenantId];
+
+            if ($status !== 'ALL') {
+                if ($status === 'VERIFIED' || $status === 'TXN_SUCCESS') {
+                    $whereClause .= " AND status = 'TXN_SUCCESS'";
+                } elseif ($status === 'PENDING') {
+                    $whereClause .= " AND status = 'PENDING'";
+                } elseif ($status === 'REJECTED' || $status === 'CANCELLED' || $status === 'FAILED') {
+                    $whereClause .= " AND status IN ('CANCELLED', 'FAILED', 'EXPIRED')";
+                }
+            }
+
+            // Total count for current filter
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM orders WHERE $whereClause");
+            $countStmt->execute($params);
+            $totalFiltered = (int)$countStmt->fetchColumn();
+
+            // Fetch orders sorted newest on top
+            $sql = "SELECT * FROM orders WHERE $whereClause ORDER BY created_at DESC LIMIT $limit OFFSET $offset";
+            $orderStmt = $db->prepare($sql);
+            $orderStmt->execute($params);
+            $rawOrders = $orderStmt->fetchAll();
+
+            $formatted = [];
+            foreach ($rawOrders as $o) {
+                $formatted[] = [
+                    'id' => $o['id'],
+                    'orderId' => $o['order_id'],
+                    'amount' => (float)$o['amount'],
+                    'currency' => $o['currency'] ?? 'INR',
+                    'status' => $o['status'],
+                    'customerName' => $o['customer_name'] ?? null,
+                    'customerMobile' => $o['customer_mobile'] ?? null,
+                    'utr' => $o['utr'] ?? null,
+                    'provider' => $o['provider'] ?? null,
+                    'remark1' => $o['remark1'] ?? null,
+                    'paymentUrl' => $o['payment_url'] ?? null,
+                    'createdAt' => $o['created_at'],
+                    'paidAt' => $o['paid_at'] ?? null,
+                ];
+            }
+
+            echo json_encode([
+                'status' => true,
+                'total' => $totalFiltered,
+                'counts' => $counts,
+                'orders' => $formatted,
+                'data' => $formatted,
+                'pagination' => [
+                    'total' => $totalFiltered,
+                    'limit' => $limit,
+                    'offset' => $offset,
+                    'hasMore' => ($offset + $limit) < $totalFiltered
+                ]
+            ]);
+            exit;
+        }
+
+        // I. List devices for tenant
         $tenant = authenticateUser();
         if (!$tenant) {
             http_response_code(401);

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { ApiService } from '../../services/api';
 import { PairedDevice } from '../../types';
+import { formatIST } from '../../utils/dateUtils';
 import { 
   Smartphone, 
   Plus, 
@@ -266,7 +267,7 @@ export const DevicesManager: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-slate-400">Last Heartbeat:</span>
                   <span className="text-slate-300 text-[10px]">
-                    {device.lastHeartbeatAt ? new Date(device.lastHeartbeatAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Recent'}
+                    {device.lastHeartbeatAt ? formatIST(device.lastHeartbeatAt, { timeOnly: true, includeSeconds: true }) : 'Recent'}
                   </span>
                 </div>
               </div>

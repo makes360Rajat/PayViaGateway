@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { ApiService } from '../../services/api';
 import { Order, MerchantAccount, Device } from '../../types';
 import { CreatePaymentLinkModal } from '../../components/orders/CreatePaymentLinkModal';
+import { formatIST, isTodayIST } from '../../utils/dateUtils';
 import {
   TrendingUp,
   Wallet,
@@ -59,9 +60,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     loadData();
   }, []);
 
-  // Metrics computation
-  const today = new Date().toISOString().slice(0, 10);
-  const todayOrders = orders.filter(o => o.createdAt && o.createdAt.startsWith(today));
+  // Metrics computation (strictly using Indian Standard Time - IST)
+  const todayOrders = orders.filter(o => isTodayIST(o.createdAt));
   const successfulOrders = orders.filter(o => o.status === 'TXN_SUCCESS');
   const todayVolume = todayOrders
     .filter(o => o.status === 'TXN_SUCCESS')
@@ -431,8 +431,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                     <td className="py-3 text-slate-300">
                       {o.utr || <span className="text-slate-600">—</span>}
                     </td>
-                    <td className="py-3 text-[10px] text-slate-500 text-right">
-                      {new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    <td className="py-3 text-[10px] text-slate-400 font-mono text-right whitespace-nowrap">
+                      {formatIST(o.createdAt, { timeOnly: true })}
                     </td>
                   </tr>
                 ))
