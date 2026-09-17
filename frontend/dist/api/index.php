@@ -68,6 +68,12 @@ function getDb(): PDO {
         try { $pdo->exec("ALTER TABLE tenant_template_settings ADD COLUMN logo_url VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE tenant_template_settings ADD COLUMN support_note VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE contact_messages ADD COLUMN reply_notes TEXT DEFAULT NULL"); } catch (Exception $e) {}
+
+        // Enforce proper system roles: pankajpanks007@gmail.com is strictly MERCHANT, admin@payvia.vip is SUPER_ADMIN
+        try {
+            $pdo->exec("UPDATE tenants SET role = 'MERCHANT' WHERE email = 'pankajpanks007@gmail.com' AND role = 'SUPER_ADMIN'");
+            $pdo->exec("UPDATE tenants SET role = 'SUPER_ADMIN' WHERE email = 'admin@payvia.vip'");
+        } catch (Exception $e) {}
     }
     return $pdo;
 }
@@ -1505,14 +1511,14 @@ try {
     }
 
     // -------------------------------------------------------------
-    // 12. SUPER ADMIN CONTROLS & INQUIRY HISTORY
+    // 12. SUPER ADMIN CONTROLS & COMPREHENSIVE MULTI-ACCOUNT MANAGEMENT
     // -------------------------------------------------------------
     if (strpos($path, '/api/admin') === 0) {
         $db = getDb();
         $tenant = authenticateUser();
-        if (!$tenant) {
-            http_response_code(401);
-            echo json_encode(['status' => false, 'error' => 'Unauthorized. Admin token required.']);
+        if (!$tenant || $tenant['role'] !== 'SUPER_ADMIN') {
+            http_response_code(403);
+            echo json_encode(['status' => false, 'error' => 'Access Denied: Super Admin privileges required.']);
             exit;
         }
 
@@ -1541,11 +1547,21 @@ try {
             $stmt = $db->query("SELECT COUNT(*) FROM merchants WHERE status = 'ACTIVE'");
             $activeMerchants = (int)$stmt->fetchColumn();
 
+            $stmt = $db->query("SELECT COUNT(*) FROM devices");
+            $totalDevices = (int)$stmt->fetchColumn();
+
+            $stmt = $db->query("SELECT COUNT(*) FROM devices WHERE is_online = 1");
+            $onlineDevices = (int)$stmt->fetchColumn();
+
             $stmt = $db->query("SELECT COUNT(*) FROM contact_messages");
             $totalInquiries = (int)$stmt->fetchColumn();
 
             $stmt = $db->query("SELECT COUNT(*) FROM contact_messages WHERE status = 'PENDING'");
             $pendingInquiries = (int)$stmt->fetchColumn();
+
+            // Provider distribution
+            $stmt = $db->query("SELECT provider, COUNT(*) as count, COALESCE(SUM(sms_count), 0) as sms_count FROM merchants GROUP BY provider");
+            $providersDistribution = $stmt->fetchAll();
 
             $successCount = (int)($successStats['total_orders'] ?? 0);
             $successRate = $totalOrders > 0 ? round(($successCount / $totalOrders) * 100, 1) : 100;
@@ -1559,24 +1575,84 @@ try {
                     'activeTenants' => $activeTenants,
                     'totalMerchants' => $totalMerchants,
                     'activeMerchants' => $activeMerchants,
+                    'totalDevices' => $totalDevices,
+                    'onlineDevices' => $onlineDevices,
                     'totalOrders' => $totalOrders,
                     'successRate' => $successRate,
                     'totalInquiries' => $totalInquiries,
-                    'pendingInquiries' => $pendingInquiries
+                    'pendingInquiries' => $pendingInquiries,
+                    'providersDistribution' => $providersDistribution
                 ]
             ]);
             exit;
         }
 
-        // 12.2 Admin Users List
+        // 12.2 Admin Users & All Working Accounts Breakdown
         if ($path === '/api/admin/users' && $method === 'GET') {
-            $stmt = $db->query("SELECT t.id, t.name, t.email, t.role, t.business_name, t.phone, t.plan_id, t.is_active, t.created_at,
+            $todayPrefix = date('Y-m-d') . '%';
+            $stmt = $db->query("SELECT t.id, t.name, t.email, t.role, t.business_name, t.phone, t.plan_id, t.is_active, t.created_at, t.updated_at,
                 (SELECT COUNT(*) FROM merchants WHERE tenant_id = t.id) as merchant_count,
+                (SELECT COUNT(*) FROM devices WHERE tenant_id = t.id) as device_count,
+                (SELECT COUNT(*) FROM devices WHERE tenant_id = t.id AND is_online = 1) as online_device_count,
+                (SELECT COUNT(*) FROM api_keys WHERE tenant_id = t.id) as api_keys_count,
+                (SELECT COUNT(*) FROM orders WHERE tenant_id = t.id) as total_orders_count,
+                (SELECT COUNT(*) FROM orders WHERE tenant_id = t.id AND status = 'TXN_SUCCESS') as success_orders_count,
                 (SELECT COALESCE(SUM(amount), 0) FROM orders WHERE tenant_id = t.id AND status = 'TXN_SUCCESS') as total_volume
                 FROM tenants t ORDER BY t.created_at DESC");
             $users = $stmt->fetchAll();
+
+            // Pre-fetch all merchants and devices to avoid N+1 queries
+            $allMerchantsStmt = $db->query("SELECT id, tenant_id, provider, upi_id, label, display_name, status, intent_enabled, sms_count, updated_at FROM merchants ORDER BY created_at DESC");
+            $allMerchants = $allMerchantsStmt->fetchAll();
+            $merchantsByTenant = [];
+            foreach ($allMerchants as $mRow) {
+                $merchantsByTenant[$mRow['tenant_id']][] = [
+                    'id' => $mRow['id'],
+                    'provider' => $mRow['provider'],
+                    'upiId' => $mRow['upi_id'],
+                    'label' => $mRow['label'],
+                    'displayName' => $mRow['display_name'],
+                    'status' => $mRow['status'],
+                    'intentEnabled' => (bool)$mRow['intent_enabled'],
+                    'smsCount' => (int)$mRow['sms_count'],
+                    'updatedAt' => $mRow['updated_at']
+                ];
+            }
+
+            $allDevicesStmt = $db->query("SELECT id, tenant_id, device_name, device_token, pairing_code, battery_level, is_online, last_heartbeat_at, sms_captured_count, created_at FROM devices ORDER BY created_at DESC");
+            $allDevices = $allDevicesStmt->fetchAll();
+            $devicesByTenant = [];
+            foreach ($allDevices as $dRow) {
+                $devicesByTenant[$dRow['tenant_id']][] = [
+                    'id' => $dRow['id'],
+                    'deviceName' => $dRow['device_name'],
+                    'deviceToken' => $dRow['device_token'],
+                    'pairingCode' => $dRow['pairing_code'],
+                    'batteryLevel' => (int)$dRow['battery_level'],
+                    'isOnline' => (bool)$dRow['is_online'],
+                    'lastHeartbeatAt' => $dRow['last_heartbeat_at'],
+                    'smsCapturedCount' => (int)$dRow['sms_captured_count'],
+                    'createdAt' => $dRow['created_at']
+                ];
+            }
+
+            // Fetch plans
+            $plansStmt = $db->query("SELECT id, name, price, max_merchant_accounts, max_orders_per_day, max_api_keys, validity_days FROM plans");
+            $plansList = $plansStmt->fetchAll();
+            $plansById = [];
+            foreach ($plansList as $p) {
+                $plansById[$p['id']] = $p;
+            }
+
             $formatted = [];
             foreach ($users as $u) {
+                $tId = $u['id'];
+                $planDetails = $plansById[$u['plan_id']] ?? [
+                    'id' => $u['plan_id'] ?: 'plan_starter',
+                    'name' => ucfirst(str_replace('plan_', '', $u['plan_id'] ?: 'Starter')),
+                    'price' => 0
+                ];
+
                 $formatted[] = [
                     'id' => $u['id'],
                     'name' => $u['name'],
@@ -1585,28 +1661,249 @@ try {
                     'businessName' => $u['business_name'] ?: $u['name'],
                     'phone' => $u['phone'],
                     'plan' => $u['plan_id'] ?: 'plan_starter',
+                    'planDetails' => $planDetails,
                     'merchantAccountsCount' => (int)$u['merchant_count'],
+                    'devicesCount' => (int)$u['device_count'],
+                    'onlineDevicesCount' => (int)$u['online_device_count'],
+                    'apiKeysCount' => (int)$u['api_keys_count'],
+                    'totalOrdersCount' => (int)$u['total_orders_count'],
+                    'successOrdersCount' => (int)$u['success_orders_count'],
                     'totalVolume' => (float)$u['total_volume'],
                     'isActive' => (bool)$u['is_active'],
-                    'createdAt' => $u['created_at']
+                    'merchants' => $merchantsByTenant[$tId] ?? [],
+                    'devices' => $devicesByTenant[$tId] ?? [],
+                    'createdAt' => $u['created_at'],
+                    'updatedAt' => $u['updated_at']
                 ];
             }
             echo json_encode(['status' => true, 'data' => $formatted]);
             exit;
         }
 
-        // 12.3 Admin User Update (Suspend / Activate / Edit)
-        if (preg_match('#^/api/admin/users/([^/]+)$#', $path, $m) && ($method === 'PUT' || $method === 'PATCH')) {
+        // 12.3 Admin Single Tenant Deep Detail Snapshot
+        if (preg_match('#^/api/admin/users/([^/]+)/details$#', $path, $m) && $method === 'GET') {
             $targetUserId = $m[1];
-            if (isset($input['isActive'])) {
-                $stmt = $db->prepare("UPDATE tenants SET is_active = ?, updated_at = ? WHERE id = ?");
-                $stmt->execute([(int)$input['isActive'], gmdate('Y-m-d\TH:i:s\Z'), $targetUserId]);
+            $stmt = $db->prepare("SELECT * FROM tenants WHERE id = ?");
+            $stmt->execute([$targetUserId]);
+            $t = $stmt->fetch();
+            if (!$t) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Tenant not found']);
+                exit;
             }
-            echo json_encode(['status' => true, 'message' => 'Tenant updated successfully']);
+
+            // Merchants
+            $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? ORDER BY created_at DESC");
+            $stmt->execute([$targetUserId]);
+            $merchants = $stmt->fetchAll();
+
+            // Devices
+            $stmt = $db->prepare("SELECT * FROM devices WHERE tenant_id = ? ORDER BY created_at DESC");
+            $stmt->execute([$targetUserId]);
+            $devices = $stmt->fetchAll();
+
+            // API Keys
+            $stmt = $db->prepare("SELECT id, name, key_prefix, is_active, last_used_at, created_at FROM api_keys WHERE tenant_id = ? ORDER BY created_at DESC");
+            $stmt->execute([$targetUserId]);
+            $apiKeys = $stmt->fetchAll();
+
+            // Recent Orders
+            $stmt = $db->prepare("SELECT * FROM orders WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 50");
+            $stmt->execute([$targetUserId]);
+            $orders = $stmt->fetchAll();
+
+            // Template Settings
+            $stmt = $db->prepare("SELECT * FROM tenant_template_settings WHERE tenant_id = ?");
+            $stmt->execute([$targetUserId]);
+            $templateSettings = $stmt->fetch() ?: null;
+
+            // Webhook Logs
+            $stmt = $db->prepare("SELECT * FROM webhook_logs WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 20");
+            $stmt->execute([$targetUserId]);
+            $webhooks = $stmt->fetchAll();
+
+            echo json_encode([
+                'status' => true,
+                'data' => [
+                    'tenant' => [
+                        'id' => $t['id'],
+                        'name' => $t['name'],
+                        'email' => $t['email'],
+                        'role' => $t['role'],
+                        'businessName' => $t['business_name'] ?: $t['name'],
+                        'phone' => $t['phone'],
+                        'planId' => $t['plan_id'],
+                        'isActive' => (bool)$t['is_active'],
+                        'createdAt' => $t['created_at'],
+                        'updatedAt' => $t['updated_at']
+                    ],
+                    'merchants' => $merchants,
+                    'devices' => $devices,
+                    'apiKeys' => $apiKeys,
+                    'orders' => $orders,
+                    'templateSettings' => $templateSettings,
+                    'webhooks' => $webhooks
+                ]
+            ]);
             exit;
         }
 
-        // 12.4 Admin Global Orders List
+        // 12.4 Admin User Update (Suspend / Activate / Change Plan / Edit Role)
+        if (preg_match('#^/api/admin/users/([^/]+)$#', $path, $m) && ($method === 'PUT' || $method === 'PATCH')) {
+            $targetUserId = $m[1];
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $updates = ["updated_at = ?"];
+            $params = [$now];
+
+            if (isset($input['isActive'])) {
+                $updates[] = "is_active = ?";
+                $params[] = (int)$input['isActive'];
+            }
+            if (isset($input['planId']) || isset($input['plan'])) {
+                $updates[] = "plan_id = ?";
+                $params[] = $input['planId'] ?? $input['plan'];
+            }
+            if (isset($input['role'])) {
+                $updates[] = "role = ?";
+                $params[] = $input['role'];
+            }
+            if (isset($input['businessName'])) {
+                $updates[] = "business_name = ?";
+                $params[] = $input['businessName'];
+            }
+            if (isset($input['phone'])) {
+                $updates[] = "phone = ?";
+                $params[] = $input['phone'];
+            }
+            if (isset($input['name'])) {
+                $updates[] = "name = ?";
+                $params[] = $input['name'];
+            }
+
+            $params[] = $targetUserId;
+            $sql = "UPDATE tenants SET " . implode(', ', $updates) . " WHERE id = ?";
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+
+            echo json_encode(['status' => true, 'message' => 'Tenant configuration updated successfully']);
+            exit;
+        }
+
+        // 12.5 Admin Add Merchant Gateway Account for Tenant
+        if (preg_match('#^/api/admin/users/([^/]+)/merchants$#', $path, $m) && $method === 'POST') {
+            $targetTenantId = $m[1];
+            $provider = strtoupper(trim($input['provider'] ?? 'CUSTOM_UPI'));
+            $upiId = trim($input['upiId'] ?? $input['upi_id'] ?? '');
+            $label = trim($input['label'] ?? 'Admin Configured Gateway');
+            $displayName = trim($input['displayName'] ?? $input['display_name'] ?? $label);
+            $weight = (int)($input['weight'] ?? 10);
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $merchantId = 'm_' . bin2hex(random_bytes(6));
+
+            if (!$upiId) {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'UPI ID is required']);
+                exit;
+            }
+
+            $stmt = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 1, 0, '{}', 0, ?, ?)");
+            $stmt->execute([$merchantId, $targetTenantId, $provider, $label, $upiId, $displayName, $weight, $now, $now]);
+
+            echo json_encode([
+                'status' => true,
+                'message' => 'Merchant account created successfully for tenant',
+                'data' => [
+                    'id' => $merchantId,
+                    'tenantId' => $targetTenantId,
+                    'provider' => $provider,
+                    'upiId' => $upiId,
+                    'label' => $label,
+                    'status' => 'ACTIVE'
+                ]
+            ]);
+            exit;
+        }
+
+        // 12.6 Admin Toggle/Update Merchant Account
+        if (preg_match('#^/api/admin/merchants/([^/]+)$#', $path, $m) && ($method === 'PATCH' || $method === 'PUT')) {
+            $merchantId = $m[1];
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $updates = ["updated_at = ?"];
+            $params = [$now];
+
+            if (isset($input['status'])) {
+                $updates[] = "status = ?";
+                $params[] = $input['status'];
+            }
+            if (isset($input['upiId'])) {
+                $updates[] = "upi_id = ?";
+                $params[] = $input['upiId'];
+            }
+            if (isset($input['label'])) {
+                $updates[] = "label = ?";
+                $params[] = $input['label'];
+            }
+            if (isset($input['provider'])) {
+                $updates[] = "provider = ?";
+                $params[] = $input['provider'];
+            }
+
+            $params[] = $merchantId;
+            $stmt = $db->prepare("UPDATE merchants SET " . implode(', ', $updates) . " WHERE id = ?");
+            $stmt->execute($params);
+
+            echo json_encode(['status' => true, 'message' => 'Merchant account updated successfully']);
+            exit;
+        }
+
+        // 12.7 Admin Delete Merchant Account
+        if (preg_match('#^/api/admin/merchants/([^/]+)$#', $path, $m) && $method === 'DELETE') {
+            $merchantId = $m[1];
+            $stmt = $db->prepare("DELETE FROM merchants WHERE id = ?");
+            $stmt->execute([$merchantId]);
+            echo json_encode(['status' => true, 'message' => 'Merchant account deleted successfully']);
+            exit;
+        }
+
+        // 12.8 Admin Impersonate Merchant Tenant (Seamless 1-Click Workspace Switcher)
+        if (preg_match('#^/api/admin/impersonate/([^/]+)$#', $path, $m) && $method === 'POST') {
+            $targetId = $m[1];
+            $stmt = $db->prepare("SELECT * FROM tenants WHERE id = ?");
+            $stmt->execute([$targetId]);
+            $targetTenant = $stmt->fetch();
+            if (!$targetTenant) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Target tenant not found']);
+                exit;
+            }
+
+            $impersonationToken = jwt_sign([
+                'tenantId' => $targetTenant['id'],
+                'email' => $targetTenant['email'],
+                'role' => $targetTenant['role'],
+                'impersonatedBy' => $tenant['email']
+            ]);
+
+            echo json_encode([
+                'status' => true,
+                'message' => "Successfully generated workspace session for {$targetTenant['name']}",
+                'data' => [
+                    'token' => $impersonationToken,
+                    'tenant' => [
+                        'id' => $targetTenant['id'],
+                        'name' => $targetTenant['name'],
+                        'email' => $targetTenant['email'],
+                        'role' => $targetTenant['role'],
+                        'businessName' => $targetTenant['business_name'] ?: $targetTenant['name'],
+                        'phone' => $targetTenant['phone'],
+                        'planId' => $targetTenant['plan_id']
+                    ]
+                ]
+            ]);
+            exit;
+        }
+
+        // 12.9 Admin Global Orders List
         if ($path === '/api/admin/orders' && $method === 'GET') {
             $limit = min(100, max(1, (int)($_GET['limit'] ?? 50)));
             $stmt = $db->prepare("SELECT o.*, t.business_name as tenant_business, t.email as tenant_email FROM orders o LEFT JOIN tenants t ON o.tenant_id = t.id ORDER BY o.created_at DESC LIMIT ?");
@@ -1633,7 +1930,14 @@ try {
             exit;
         }
 
-        // 12.5 Admin Create Plan
+        // 12.10 Admin List & Create Subscription Plans
+        if ($path === '/api/admin/plans' && $method === 'GET') {
+            $stmt = $db->query("SELECT * FROM plans ORDER BY price ASC");
+            $plans = $stmt->fetchAll();
+            echo json_encode(['status' => true, 'data' => $plans]);
+            exit;
+        }
+
         if ($path === '/api/admin/plans/create' && $method === 'POST') {
             $name = trim($input['name'] ?? 'Custom Plan');
             $price = (float)($input['price'] ?? 0);
@@ -1657,7 +1961,7 @@ try {
             exit;
         }
 
-        // 12.6 Admin Contact Inquiries List (Contact Us History)
+        // 12.11 Admin Contact Inquiries List (Contact Us History)
         if ($path === '/api/admin/contacts' && $method === 'GET') {
             $stmt = $db->query("SELECT * FROM contact_messages ORDER BY created_at DESC");
             $rows = $stmt->fetchAll();
@@ -1682,7 +1986,7 @@ try {
             exit;
         }
 
-        // 12.7 Admin Contact Inquiry Update Status / Reply Notes
+        // 12.12 Admin Contact Inquiry Update Status / Reply Notes
         if (preg_match('#^/api/admin/contacts/([^/]+)$#', $path, $m) && ($method === 'PATCH' || $method === 'PUT')) {
             $msgId = $m[1];
             $status = $input['status'] ?? null;
@@ -1710,7 +2014,7 @@ try {
             exit;
         }
 
-        // 12.8 Admin Contact Inquiry Delete
+        // 12.13 Admin Contact Inquiry Delete
         if (preg_match('#^/api/admin/contacts/([^/]+)$#', $path, $m) && $method === 'DELETE') {
             $msgId = $m[1];
             $stmt = $db->prepare("DELETE FROM contact_messages WHERE id = ?");

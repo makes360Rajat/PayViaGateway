@@ -68,7 +68,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
             aria-label="PayVia360 Portal Login / Dashboard"
           >
             <img 
-              src="/weblogo.png" 
+              src="/payvia_logo_white_text.png" 
               alt="PayVia360 Payment Gateway" 
               className="h-20 sm:h-28 md:h-36 w-auto object-contain drop-shadow-[0_0_40px_rgba(16,185,129,0.35)] transition-transform duration-500 group-hover:brightness-110"
             />
@@ -493,7 +493,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onNavigate }) => {
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
           
           <div className="space-y-4 md:col-span-1">
-            <img src="/weblogo.png" alt="PayVia360 Logo" className="h-10 w-auto object-contain" />
+            <img src="/payvia_logo_white_text.png" alt="PayVia360 Logo" className="h-10 w-auto object-contain" />
             <p className="text-xs text-emerald-300/70 leading-relaxed font-mono">
               The high-velocity zero-commission direct-to-merchant payment management and transaction sensing platform.
             </p>

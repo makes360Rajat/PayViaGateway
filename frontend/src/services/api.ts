@@ -269,11 +269,45 @@ export class ApiService {
     return this.request('/admin/users');
   }
 
+  public static getAdminUserDetails(id: string) {
+    return this.request(`/admin/users/${id}/details`);
+  }
+
   public static updateAdminUser(id: string, data: any) {
     return this.request(`/admin/users/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data)
     });
+  }
+
+  public static createAdminMerchant(tenantId: string, data: any) {
+    return this.request(`/admin/users/${tenantId}/merchants`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public static updateAdminMerchant(merchantId: string, data: any) {
+    return this.request(`/admin/merchants/${merchantId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public static deleteAdminMerchant(merchantId: string) {
+    return this.request(`/admin/merchants/${merchantId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  public static impersonateTenant(id: string) {
+    return this.request(`/admin/impersonate/${id}`, {
+      method: 'POST'
+    });
+  }
+
+  public static getAdminPlans() {
+    return this.request('/admin/plans');
   }
 
   public static getAdminOrders(params: any = {}) {

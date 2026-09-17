@@ -66,7 +66,7 @@ const getPathFromPage = (page: string): string => {
 };
 
 export const MainApp: React.FC = () => {
-  const { user, subscription, isLoading } = useAuth();
+  const { user, subscription, isLoading, isImpersonating, exitImpersonation } = useAuth();
   const [currentPage, setCurrentPage] = useState<string>(() => getPageFromPath(window.location.pathname, null));
   const [previewTemplateId, setPreviewTemplateId] = useState<string>('template_1');
   const [checkoutToken, setCheckoutToken] = useState<string | null>(() => {
@@ -163,8 +163,31 @@ export const MainApp: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#040f0c] text-emerald-50 flex flex-col font-sans">
       
+      {/* Top Banner if Super Admin is Impersonating a Merchant Workspace */}
+      {isImpersonating && user && (
+        <div className="bg-gradient-to-r from-purple-700 via-indigo-600 to-purple-700 text-white px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs font-semibold shadow-xl sticky top-0 z-50 backdrop-blur-md border-b border-purple-400/30">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded bg-black/40 text-purple-200 text-[10px] font-mono font-bold uppercase tracking-wider">
+              Super Admin Workspace Mode
+            </span>
+            <span>
+              Controlling merchant workspace: <strong>{user.businessName || user.name}</strong> ({user.email}).
+            </span>
+          </div>
+          <button
+            onClick={async () => {
+              await exitImpersonation();
+              handleNavigate('admin');
+            }}
+            className="px-3.5 py-1 rounded-lg bg-white text-purple-900 font-extrabold hover:bg-purple-50 active:scale-95 transition text-xs shadow-md shrink-0"
+          >
+            ← Return to Super Admin Panel
+          </button>
+        </div>
+      )}
+
       {/* Top Banner if Subscription is Inactive */}
-      {user && !isSubscriptionActive && currentPage !== 'landing' && currentPage !== 'auth' && (
+      {user && !isSubscriptionActive && !isImpersonating && currentPage !== 'landing' && currentPage !== 'auth' && (
         <div className="bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 border-b border-amber-500/35 px-4 py-2.5 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-amber-200 shadow-glow-amber sticky top-0 z-40 backdrop-blur-md">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-400 animate-pulse shrink-0" />
@@ -220,7 +243,7 @@ export const MainApp: React.FC = () => {
           {currentPage === 'payment-page' && <PaymentPageCustomizer onNavigate={handleNavigate} />}
 
           {currentPage === 'plans' && <PlansPricing onNavigate={handleNavigate} />}
-          {currentPage === 'admin' && <AdminPanel />}
+          {currentPage === 'admin' && (user?.role === 'SUPER_ADMIN' ? <AdminPanel /> : <DashboardOverview onNavigate={handleNavigate} />)}
           {currentPage === 'docs' && <ApiDocsPage />}
           {currentPage === 'contact' && <ContactPage onNavigate={handleNavigate} />}
         </main>

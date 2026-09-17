@@ -57,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
           )}
 
           <div className="flex flex-col cursor-pointer group justify-center py-1" onClick={() => onNavigate(user ? 'dashboard' : 'landing')}>
-            <img src="/weblogo.png" alt="PayVia360 Logo" className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:scale-105 transition duration-300 drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]" />
+            <img src="/payvia_logo_white_text.png" alt="PayVia360 Logo" className="h-10 sm:h-12 md:h-13 w-auto object-contain group-hover:scale-105 transition duration-300 drop-shadow-[0_0_15px_rgba(16,185,129,0.2)]" />
             <span className="text-[8px] sm:text-[9.5px] text-emerald-400 font-mono font-bold tracking-widest uppercase mt-0.5">PAYMENT-SETTLEMENT ENGINE</span>
           </div>
         </div>
@@ -117,6 +117,21 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
         <div className="flex items-center gap-3">
           {user ? (
             <>
+              {/* Super Admin Center Button (for Root Admin) */}
+              {user?.role === 'SUPER_ADMIN' && (
+                <button
+                  onClick={() => onNavigate('admin')}
+                  className={`flex items-center gap-1.5 rounded-xl border px-3.5 py-2 text-xs font-bold transition active:scale-95 ${
+                    currentPage === 'admin'
+                      ? 'bg-rose-600 border-rose-500 text-white shadow-glow'
+                      : 'bg-rose-950/40 border-rose-500/40 text-rose-300 hover:bg-rose-600/30 hover:text-white'
+                  }`}
+                >
+                  <ShieldCheck className="h-4 w-4 text-rose-400" />
+                  <span>Super Admin</span>
+                </button>
+              )}
+
               {/* Documentation link for signed-in users */}
               <button
                 onClick={() => onNavigate('docs')}

@@ -57,8 +57,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
     <div className="w-68 shrink-0 border-r border-white/10 bg-[#0b0b12] backdrop-blur-2xl h-full p-4 flex flex-col justify-between shadow-2xl overflow-y-auto">
       <div className="space-y-6">
 
+        {/* Mobile Header with Logo */}
+        <div className="md:hidden px-2 pb-3 border-b border-white/10 flex items-center justify-between">
+          <img src="/payvia_logo_white_text.png" alt="PayVia360 Logo" className="h-9 w-auto object-contain drop-shadow-[0_0_15px_rgba(16,185,129,0.25)]" />
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-slate-400 hover:bg-white/10 hover:text-white transition"
+              aria-label="Close menu"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          )}
+        </div>
+
         {/* Workspace Menu Header */}
-        <div className="px-3 pt-2 flex items-center justify-between">
+        <div className="px-3 pt-1 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-purple-400 animate-pulse shadow-glow" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-purple-300 font-mono">
@@ -69,14 +83,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate, isOpe
             <span className="text-[10px] font-mono text-purple-300 bg-purple-500/10 border border-purple-500/25 px-2 py-0.5 rounded-md">
               v2.4 Live
             </span>
-            {onClose && (
-              <button
-                onClick={onClose}
-                className="md:hidden rounded-lg p-1 text-slate-400 hover:bg-white/10"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            )}
           </div>
         </div>
 

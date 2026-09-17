@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { ShieldCheck, Lock, Mail, Building, Phone, ArrowRight, Sparkles, UserCheck } from 'lucide-react';
+import { Lock, Mail, ArrowRight, Building2, ShieldAlert } from 'lucide-react';
 
 interface AuthPageProps {
   onSuccess: (targetPage?: string) => void;
@@ -8,6 +8,7 @@ interface AuthPageProps {
 
 export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
   const { login, register } = useAuth();
+  const [accountType, setAccountType] = useState<'MERCHANT' | 'ADMIN'>('MERCHANT');
   const [isLogin, setIsLogin] = useState(true);
   
   // Form fields
@@ -29,7 +30,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
       const res = await login(email, password);
       setIsLoading(false);
       if (res.success) {
-        onSuccess('dashboard');
+        if (accountType === 'ADMIN' || res.user?.role === 'SUPER_ADMIN') {
+          onSuccess('admin');
+        } else {
+          onSuccess('dashboard');
+        }
       } else {
         setError(res.error || 'Invalid credentials');
       }
@@ -45,42 +50,59 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
     }
   };
 
-  const autofillMerchant = () => {
-    setEmail('pankajpanks007@gmail.com');
-    setPassword('Db@0125');
-    setIsLogin(true);
-  };
-
-  const autofillAdmin = () => {
-    setEmail('admin@payvia.vip');
-    setPassword('Admin@123456');
-    setIsLogin(true);
-  };
-
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center p-4 bg-[#090d16]">
       <div className="w-full max-w-md">
         
-        {/* Quick Demo Credentials Autofill Banner */}
-        <div className="mb-6 glass-card p-3.5 rounded-2xl border border-indigo-500/20 text-xs">
-          <div className="flex items-center gap-1.5 font-semibold text-indigo-400 mb-2">
-            <Sparkles className="h-4 w-4" />
-            <span>Quick Login Presets</span>
+        {/* Account Type Selector Banner (Secure - No Credentials Displayed) */}
+        <div className="mb-5 glass-card p-3 rounded-2xl border border-white/10 text-xs shadow-glow">
+          <div className="flex items-center justify-between text-slate-400 mb-2 px-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300">Account Access Type:</span>
+            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+              accountType === 'MERCHANT' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+            }`}>
+              {accountType === 'MERCHANT' ? 'MERCHANT PORTAL' : 'SUPER ADMIN ROOT'}
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={autofillMerchant}
-              className="rounded-lg bg-indigo-600/20 border border-indigo-500/30 p-2 text-left hover:bg-indigo-600/30 transition text-slate-200"
+              type="button"
+              onClick={() => { setAccountType('MERCHANT'); setError(null); }}
+              className={`rounded-xl p-2.5 text-left transition flex items-center gap-2.5 ${
+                accountType === 'MERCHANT'
+                  ? 'bg-indigo-600/30 border border-indigo-500/50 shadow-glow text-white'
+                  : 'bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800/50'
+              }`}
             >
-              <div className="font-bold text-[11px] text-white">Merchant Account</div>
-              <div className="text-[10px] text-slate-400 font-mono">pankajpanks007@...</div>
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                accountType === 'MERCHANT' ? 'bg-indigo-500/20 text-indigo-300' : 'bg-slate-800 text-slate-500'
+              }`}>
+                <Building2 className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="font-bold text-[12px] leading-tight">Merchant Account</div>
+                <div className="text-[10px] text-slate-400">Gateway & Settlements</div>
+              </div>
             </button>
+
             <button
-              onClick={autofillAdmin}
-              className="rounded-lg bg-purple-600/20 border border-purple-500/30 p-2 text-left hover:bg-purple-600/30 transition text-slate-200"
+              type="button"
+              onClick={() => { setAccountType('ADMIN'); setError(null); }}
+              className={`rounded-xl p-2.5 text-left transition flex items-center gap-2.5 ${
+                accountType === 'ADMIN'
+                  ? 'bg-purple-600/30 border border-purple-500/50 shadow-glow text-white'
+                  : 'bg-slate-900/60 border border-white/5 text-slate-400 hover:text-white hover:bg-slate-800/50'
+              }`}
             >
-              <div className="font-bold text-[11px] text-purple-300">Super Admin</div>
-              <div className="text-[10px] text-slate-400 font-mono">admin@payvia.vip</div>
+              <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
+                accountType === 'ADMIN' ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-800 text-slate-500'
+              }`}>
+                <ShieldAlert className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="font-bold text-[12px] leading-tight">Super Admin</div>
+                <div className="text-[10px] text-slate-400">Platform Governance</div>
+              </div>
             </button>
           </div>
         </div>
@@ -89,13 +111,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
         <div className="glass-panel p-8 rounded-3xl border border-white/10 shadow-2xl">
           
           <div className="text-center mb-6">
-            <img src="/weblogo.png" alt="PayVia360 Logo" className="h-16 sm:h-20 w-auto mx-auto mb-2 object-contain drop-shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-transform hover:scale-105" />
+            <img src="/payvia_logo_white_text.png" alt="PayVia360 Logo" className="h-16 sm:h-20 w-auto mx-auto mb-2 object-contain drop-shadow-[0_0_25px_rgba(16,185,129,0.3)] transition-transform hover:scale-105" />
             <p className="text-[10px] sm:text-[11px] text-emerald-400 font-mono font-bold tracking-widest uppercase mb-3">PAYMENT-SETTLEMENT ENGINE</p>
             <h1 className="font-display text-xl font-bold text-white">
-              {isLogin ? 'Welcome Back' : 'Create Merchant Account'}
+              {isLogin ? (accountType === 'ADMIN' ? 'Super Admin Portal' : 'Welcome Back') : 'Create Merchant Account'}
             </h1>
             <p className="mt-1 text-xs text-slate-400">
-              {isLogin ? 'Sign in to access your payment workspace' : 'Launch your direct settlement gateway in seconds'}
+              {isLogin 
+                ? (accountType === 'ADMIN' ? 'Enter administrator credentials for root governance' : 'Sign in to access your merchant payment workspace') 
+                : 'Launch your direct settlement gateway in seconds'}
             </p>
           </div>
 
@@ -108,10 +132,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
               Sign In
             </button>
             <button
-              onClick={() => { setIsLogin(false); setError(null); }}
+              onClick={() => { setIsLogin(false); setAccountType('MERCHANT'); setError(null); }}
               className={`rounded-lg py-2 transition ${!isLogin ? 'bg-indigo-600 text-white shadow-glow' : 'text-slate-400 hover:text-white'}`}
             >
-              Register
+              Register Merchant
             </button>
           </div>
 
@@ -161,7 +185,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
               <input
                 type="email"
                 required
-                placeholder="you@company.com"
+                placeholder={accountType === 'ADMIN' ? 'admin@yourdomain.com' : 'you@company.com'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-3.5 py-2.5 text-xs text-white placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
@@ -185,9 +209,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onSuccess }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full mt-2 rounded-xl bg-gradient-primary py-3 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition disabled:opacity-50"
+              className={`w-full mt-2 rounded-xl py-3 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition disabled:opacity-50 ${
+                accountType === 'ADMIN' && isLogin ? 'bg-gradient-to-r from-purple-600 to-indigo-600' : 'bg-gradient-primary'
+              }`}
             >
-              {isLoading ? 'Authenticating...' : isLogin ? 'Sign In to Dashboard →' : 'Create Free Account →'}
+              {isLoading ? 'Authenticating...' : isLogin ? (accountType === 'ADMIN' ? 'Sign In as Super Admin →' : 'Sign In to Dashboard →') : 'Create Free Account →'}
             </button>
           </form>
         </div>
