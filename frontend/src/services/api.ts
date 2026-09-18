@@ -1,8 +1,106 @@
 const API_BASE_URL = '/api';
 
 export class ApiService {
-  private static getToken(): string | null {
-    return localStorage.getItem('payvia_token');
+  public static getToken(): string | null {
+    // 1. Tab-isolated session token (Each tab maintains its own independent session!)
+    if (typeof sessionStorage !== 'undefined') {
+      const tabToken = sessionStorage.getItem('payvia_tab_token');
+      if (tabToken) {
+        return tabToken;
+      }
+    }
+
+    if (typeof localStorage === 'undefined') return null;
+
+    // 2. Check if the user is visiting an Admin path or Merchant path
+    const path = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+    const isAdminPath = path.startsWith('/admin') || path.startsWith('/login_super_admin');
+
+    if (isAdminPath) {
+      const adminToken = localStorage.getItem('payvia_admin_token');
+      if (adminToken) {
+        if (typeof sessionStorage !== 'undefined') {
+          sessionStorage.setItem('payvia_tab_token', adminToken);
+          sessionStorage.setItem('payvia_tab_role', 'SUPER_ADMIN');
+        }
+        return adminToken;
+      }
+    }
+
+    // Check merchant persistent token
+    const merchantToken = localStorage.getItem('payvia_merchant_token');
+    if (merchantToken) {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('payvia_tab_token', merchantToken);
+        sessionStorage.setItem('payvia_tab_role', 'MERCHANT');
+      }
+      return merchantToken;
+    }
+
+    // Check generic token fallback
+    const genericToken = localStorage.getItem('payvia_token');
+    if (genericToken) {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('payvia_tab_token', genericToken);
+      }
+      return genericToken;
+    }
+
+    // Fallback: Admin token if nothing else exists
+    const adminFallback = localStorage.getItem('payvia_admin_token');
+    if (adminFallback) {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('payvia_tab_token', adminFallback);
+        sessionStorage.setItem('payvia_tab_role', 'SUPER_ADMIN');
+      }
+      return adminFallback;
+    }
+
+    return null;
+  }
+
+  public static setToken(token: string, role?: string, email?: string): void {
+    const isSuperAdmin = role === 'SUPER_ADMIN' || (email && email.toLowerCase() === 'admin@payvia.vip');
+
+    // 1. Tab-level isolation: locked to the current tab
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('payvia_tab_token', token);
+      sessionStorage.setItem('payvia_tab_role', isSuperAdmin ? 'SUPER_ADMIN' : 'MERCHANT');
+      if (email) {
+        sessionStorage.setItem('payvia_tab_email', email);
+      }
+    }
+
+    // 2. Partition persistent storage by role so both Super Admin and Merchant coexist without collision!
+    if (typeof localStorage !== 'undefined') {
+      if (isSuperAdmin) {
+        localStorage.setItem('payvia_admin_token', token);
+      } else {
+        localStorage.setItem('payvia_merchant_token', token);
+        localStorage.setItem('payvia_token', token);
+      }
+    }
+  }
+
+  public static clearToken(role?: string): void {
+    const activeRole = role || (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('payvia_tab_role') : null);
+
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('payvia_tab_token');
+      sessionStorage.removeItem('payvia_tab_role');
+      sessionStorage.removeItem('payvia_tab_email');
+      sessionStorage.removeItem('payvia_original_admin_token');
+      sessionStorage.removeItem('payvia_impersonated_by');
+    }
+
+    if (typeof localStorage !== 'undefined') {
+      if (activeRole === 'SUPER_ADMIN') {
+        localStorage.removeItem('payvia_admin_token');
+      } else {
+        localStorage.removeItem('payvia_merchant_token');
+        localStorage.removeItem('payvia_token');
+      }
+    }
   }
 
   private static getHeaders(isJson = true): HeadersInit {

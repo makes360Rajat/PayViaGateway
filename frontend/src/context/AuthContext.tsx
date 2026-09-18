@@ -40,13 +40,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [usage, setUsage] = useState<QuotaUsage | null>(null);
   const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(null);
   const [planUsage, setPlanUsage] = useState<PlanUsage | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('payvia_token'));
+  const [token, setToken] = useState<string | null>(() => ApiService.getToken());
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isImpersonating, setIsImpersonating] = useState<boolean>(() => !!localStorage.getItem('payvia_original_admin_token'));
-  const [impersonatedBy, setImpersonatedBy] = useState<string | null>(() => localStorage.getItem('payvia_impersonated_by'));
+  const [isImpersonating, setIsImpersonating] = useState<boolean>(() => {
+    return typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem('payvia_original_admin_token');
+  });
+  const [impersonatedBy, setImpersonatedBy] = useState<string | null>(() => {
+    return typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('payvia_impersonated_by') : null;
+  });
 
   const refreshProfile = async () => {
-    if (!localStorage.getItem('payvia_token')) {
+    const currentToken = ApiService.getToken();
+    if (!currentToken) {
       setIsLoading(false);
       return;
     }
@@ -104,19 +109,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshProfile();
 
     const interval = setInterval(() => {
-      if (localStorage.getItem('payvia_token')) {
+      if (ApiService.getToken()) {
         refreshProfile();
       }
-    }, 10000);
+    }, 15000);
 
     const onFocus = () => {
-      if (localStorage.getItem('payvia_token')) {
+      if (ApiService.getToken()) {
         refreshProfile();
       }
     };
 
     const onCustomRefresh = () => {
-      if (localStorage.getItem('payvia_token')) {
+      if (ApiService.getToken()) {
         refreshProfile();
       }
     };
@@ -137,16 +142,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
 
     if (res.status && res.data?.token) {
-      localStorage.removeItem('payvia_original_admin_token');
-      localStorage.removeItem('payvia_impersonated_by');
+      const tenant = res.data.tenant;
+      // Isolate to current tab and partition by role in persistent storage
+      ApiService.setToken(res.data.token, tenant.role, tenant.email);
+
+      setToken(res.data.token);
+      setUser(tenant);
       setIsImpersonating(false);
       setImpersonatedBy(null);
 
-      localStorage.setItem('payvia_token', res.data.token);
-      setToken(res.data.token);
-      setUser(res.data.tenant);
       await refreshProfile();
-      return { success: true, user: res.data.tenant };
+      return { success: true, user: tenant };
     }
     return { success: false, error: res.error || 'Login failed' };
   };
@@ -157,22 +163,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsLoading(false);
 
     if (res.status && res.data?.token) {
-      localStorage.setItem('payvia_token', res.data.token);
+      const tenant = res.data.tenant;
+      ApiService.setToken(res.data.token, 'MERCHANT', tenant?.email);
+
       setToken(res.data.token);
-      setUser(res.data.tenant);
+      setUser(tenant);
       await refreshProfile();
-      return { success: true };
+      return { success: true, user: tenant };
     }
     return { success: false, error: res.error || 'Registration failed' };
   };
 
   const impersonate = async (newToken: string) => {
-    const currentToken = localStorage.getItem('payvia_token');
-    if (currentToken && !localStorage.getItem('payvia_original_admin_token')) {
-      localStorage.setItem('payvia_original_admin_token', currentToken);
-      localStorage.setItem('payvia_impersonated_by', user?.email || 'admin@payvia.vip');
+    const currentToken = ApiService.getToken();
+    if (currentToken && typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('payvia_original_admin_token')) {
+      sessionStorage.setItem('payvia_original_admin_token', currentToken);
+      sessionStorage.setItem('payvia_impersonated_by', user?.email || 'admin@payvia.vip');
     }
-    localStorage.setItem('payvia_token', newToken);
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem('payvia_tab_token', newToken);
+      sessionStorage.setItem('payvia_tab_role', 'MERCHANT');
+    }
     setToken(newToken);
     setIsImpersonating(true);
     setImpersonatedBy(user?.email || 'admin@payvia.vip');
@@ -180,11 +191,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const exitImpersonation = async () => {
-    const orig = localStorage.getItem('payvia_original_admin_token');
+    const orig = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('payvia_original_admin_token') : null;
     if (orig) {
-      localStorage.setItem('payvia_token', orig);
-      localStorage.removeItem('payvia_original_admin_token');
-      localStorage.removeItem('payvia_impersonated_by');
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem('payvia_tab_token', orig);
+        sessionStorage.setItem('payvia_tab_role', 'SUPER_ADMIN');
+        sessionStorage.removeItem('payvia_original_admin_token');
+        sessionStorage.removeItem('payvia_impersonated_by');
+      }
       setToken(orig);
       setIsImpersonating(false);
       setImpersonatedBy(null);
@@ -193,9 +207,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    localStorage.removeItem('payvia_token');
-    localStorage.removeItem('payvia_original_admin_token');
-    localStorage.removeItem('payvia_impersonated_by');
+    ApiService.clearToken(user?.role);
     setToken(null);
     setUser(null);
     setPlan(null);
