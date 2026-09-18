@@ -252,7 +252,7 @@ export const MainApp: React.FC = () => {
           )}
 
           {currentPage === 'dashboard' && <DashboardOverview onNavigate={handleNavigate} />}
-          {currentPage === 'merchants' && <MerchantsManager />}
+          {currentPage === 'merchants' && <MerchantsManager onNavigate={handleNavigate} />}
           {currentPage === 'orders' && <OrdersList />}
           {currentPage === 'profile' && <ProfilePage />}
           {currentPage === 'devices' && <DevicesManager />}

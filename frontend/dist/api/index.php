@@ -63,12 +63,36 @@ function getDb(): PDO {
             updated_at VARCHAR(64)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // Ensure plan_usage table exists for atomic test quota tracking
+        $pdo->exec("CREATE TABLE IF NOT EXISTS plan_usage (
+            id VARCHAR(64) PRIMARY KEY,
+            tenant_id VARCHAR(64) NOT NULL UNIQUE,
+            test_orders_used INT NOT NULL DEFAULT 0,
+            test_orders_limit INT NOT NULL DEFAULT 5,
+            created_at VARCHAR(64) NOT NULL,
+            updated_at VARCHAR(64) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Ensure plan_access_logs exists for audit trail
+        $pdo->exec("CREATE TABLE IF NOT EXISTS plan_access_logs (
+            id VARCHAR(64) PRIMARY KEY,
+            tenant_id VARCHAR(64) NOT NULL,
+            action VARCHAR(64) NOT NULL,
+            endpoint VARCHAR(128) NOT NULL,
+            result VARCHAR(32) NOT NULL,
+            reason VARCHAR(255) NULL,
+            ip_address VARCHAR(45) NULL,
+            user_agent VARCHAR(255) NULL,
+            created_at VARCHAR(64) NOT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         // Run safe alters in case tables already existed
         try { $pdo->exec("ALTER TABLE tenant_template_settings ADD COLUMN enabled_templates TEXT DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE tenant_template_settings ADD COLUMN logo_url VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE tenant_template_settings ADD COLUMN support_note VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE contact_messages ADD COLUMN reply_notes TEXT DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE devices ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE'"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE orders ADD COLUMN mode VARCHAR(16) NOT NULL DEFAULT 'LIVE'"); } catch (Exception $e) {}
 
         // Enforce proper system roles: pankajpanks007@gmail.com is strictly MERCHANT, admin@payvia.vip is SUPER_ADMIN
         try {
@@ -168,6 +192,149 @@ function getJsonInput(): array {
     if (!$raw) return [];
     $data = json_decode($raw, true);
     return is_array($data) ? $data : [];
+}
+
+// -------------------------------------------------------------
+// Centralized Plan Authorization & Test Quota Service
+// -------------------------------------------------------------
+class PlanService {
+    public static function logAccess($tenantId, $action, $endpoint, $result, $reason = null, $db = null) {
+        if (!$db) $db = getDb();
+        $id = 'pal_' . substr(bin2hex(random_bytes(6)), 0, 8);
+        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+        $ua = substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255);
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        try {
+            $stmt = $db->prepare("INSERT INTO plan_access_logs (id, tenant_id, action, endpoint, result, reason, ip_address, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->execute([$id, $tenantId, $action, $endpoint, $result, $reason, $ip, $ua, $now]);
+        } catch (Exception $e) {}
+    }
+
+    public static function getSubscription($tenantId, $db = null) {
+        if (!$db) $db = getDb();
+        $stmt = $db->prepare("SELECT * FROM subscriptions WHERE tenant_id = ? ORDER BY starts_at DESC LIMIT 1");
+        $stmt->execute([$tenantId]);
+        return $stmt->fetch();
+    }
+
+    public static function isPlanActive($tenantId, $db = null) {
+        if (!$db) $db = getDb();
+        // Super admin bypass
+        $stmt = $db->prepare("SELECT role FROM tenants WHERE id = ?");
+        $stmt->execute([$tenantId]);
+        $role = $stmt->fetchColumn();
+        if ($role === 'SUPER_ADMIN') return true;
+
+        $sub = self::getSubscription($tenantId, $db);
+        if (!$sub) return false;
+        
+        $status = strtoupper($sub['status'] ?? '');
+        if ($status !== 'ACTIVE') return false;
+
+        // Check expiration if set
+        if (!empty($sub['expires_at'])) {
+            $expTime = strtotime($sub['expires_at']);
+            if ($expTime && $expTime < time()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static function getTestUsage($tenantId, $db = null) {
+        if (!$db) $db = getDb();
+        $stmt = $db->prepare("SELECT * FROM plan_usage WHERE tenant_id = ?");
+        $stmt->execute([$tenantId]);
+        $usage = $stmt->fetch();
+
+        if (!$usage) {
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $id = 'pusg_' . substr(bin2hex(random_bytes(6)), 0, 8);
+            try {
+                $ins = $db->prepare("INSERT IGNORE INTO plan_usage (id, tenant_id, test_orders_used, test_orders_limit, created_at, updated_at) VALUES (?, ?, 0, 5, ?, ?)");
+                $ins->execute([$id, $tenantId, $now, $now]);
+            } catch (Exception $e) {}
+            return [
+                'used' => 0,
+                'limit' => 5,
+                'remaining' => 5
+            ];
+        }
+
+        $used = (int)$usage['test_orders_used'];
+        $limit = (int)$usage['test_orders_limit'];
+        return [
+            'used' => $used,
+            'limit' => $limit,
+            'remaining' => max(0, $limit - $used)
+        ];
+    }
+
+    public static function getEntitlements($tenantId, $db = null) {
+        if (!$db) $db = getDb();
+        $isActive = self::isPlanActive($tenantId, $db);
+        $usage = self::getTestUsage($tenantId, $db);
+        $sub = self::getSubscription($tenantId, $db);
+
+        $status = $isActive ? 'ACTIVE' : ($sub['status'] ?? 'FREE_TEST');
+        if (!$isActive && ($status === 'ACTIVE' || empty($status))) {
+            $status = 'FREE_TEST';
+        }
+
+        return [
+            'status' => $status,
+            'isPlanActive' => $isActive,
+            'isFreeTesting' => !$isActive,
+            'testOrdersUsed' => $usage['used'],
+            'testOrdersMax' => $usage['limit'],
+            'testOrdersRemaining' => $usage['remaining'],
+            'canConnectMerchant' => $isActive,
+            'canReceiveLivePayments' => $isActive,
+            'canCreateTestOrders' => $isActive || ($usage['remaining'] > 0)
+        ];
+    }
+
+    public static function requireActivePlan($tenantId, $endpoint, $db = null) {
+        if (!self::isPlanActive($tenantId, $db)) {
+            self::logAccess($tenantId, 'MERCHANT_CONNECTION_BLOCKED', $endpoint, 'BLOCKED', 'Active plan required', $db);
+            http_response_code(403);
+            echo json_encode([
+                'status' => false,
+                'error' => 'PLAN_REQUIRED',
+                'reason' => 'ACTIVE_PLAN_REQUIRED',
+                'message' => 'Connecting merchant accounts to receive live payments requires an active subscription plan. Please upgrade your plan.'
+            ]);
+            exit;
+        }
+    }
+
+    public static function consumeTestOrderQuota($tenantId, $db) {
+        $check = $db->prepare("SELECT id FROM plan_usage WHERE tenant_id = ?");
+        $check->execute([$tenantId]);
+        if (!$check->fetch()) {
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $id = 'pusg_' . substr(bin2hex(random_bytes(6)), 0, 8);
+            $ins = $db->prepare("INSERT IGNORE INTO plan_usage (id, tenant_id, test_orders_used, test_orders_limit, created_at, updated_at) VALUES (?, ?, 0, 5, ?, ?)");
+            $ins->execute([$id, $tenantId, $now, $now]);
+        }
+
+        $stmt = $db->prepare("SELECT test_orders_used, test_orders_limit FROM plan_usage WHERE tenant_id = ? FOR UPDATE");
+        $stmt->execute([$tenantId]);
+        $row = $stmt->fetch();
+        if (!$row) return false;
+
+        $used = (int)$row['test_orders_used'];
+        $limit = (int)$row['test_orders_limit'];
+
+        if ($used >= $limit) {
+            return false;
+        }
+
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $upd = $db->prepare("UPDATE plan_usage SET test_orders_used = test_orders_used + 1, updated_at = ? WHERE tenant_id = ?");
+        $upd->execute([$now, $tenantId]);
+        return true;
+    }
 }
 
 // -------------------------------------------------------------
@@ -280,6 +447,11 @@ try {
         $stmt = $db->prepare("INSERT INTO subscriptions (id, tenant_id, plan_id, status, starts_at, expires_at, orders_today, last_reset_date) VALUES (?, ?, 'plan_starter', 'PENDING_PAYMENT', ?, ?, 0, ?)");
         $stmt->execute([$subId, $tenantId, $now, $expires, date('Y-m-d')]);
 
+        // Initialize Free Test Quota (5 test orders limit)
+        $pusgId = 'pusg_' . substr(bin2hex(random_bytes(6)), 0, 8);
+        $stmt = $db->prepare("INSERT IGNORE INTO plan_usage (id, tenant_id, test_orders_used, test_orders_limit, created_at, updated_at) VALUES (?, ?, 0, 5, ?, ?)");
+        $stmt->execute([$pusgId, $tenantId, $now, $now]);
+
         // Auto-generate primary API key
         $keyId = 'key_' . substr(bin2hex(random_bytes(6)), 0, 8);
         $rawApiKey = 'pv_live_' . bin2hex(random_bytes(16));
@@ -381,6 +553,8 @@ try {
                 ],
                 'plan' => $plan,
                 'subscription' => $subscription,
+                'entitlements' => PlanService::getEntitlements($tenant['id'], $db),
+                'planUsage' => PlanService::getTestUsage($tenant['id'], $db),
                 'usage' => [
                     'merchantsUsed' => $merchantsUsed,
                     'merchantsMax' => $plan ? (int)$plan['max_merchant_accounts'] : 2,
@@ -531,6 +705,8 @@ try {
         }
 
         if ($method === 'POST') {
+            PlanService::requireActivePlan($tenant['id'], '/api/merchants', $db);
+
             $id = 'mer_' . substr(bin2hex(random_bytes(6)), 0, 8);
             $provider = $input['provider'] ?? 'CUSTOM_UPI';
             $label = $input['label'] ?? 'Main Merchant';
@@ -544,6 +720,8 @@ try {
             $stmt = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, 0, ?, 0, ?, ?)");
             $stmt->execute([$id, $tenant['id'], $provider, $label, $upiId, $displayName, $weight, $intentEnabled, $credsJson, $now, $now]);
 
+            PlanService::logAccess($tenant['id'], 'MERCHANT_CONNECTED', '/api/merchants', 'SUCCESS', "Merchant account $id connected", $db);
+
             echo json_encode(['status' => true, 'message' => 'Merchant added successfully', 'data' => ['id' => $id, 'label' => $label, 'provider' => $provider, 'upiId' => $upiId, 'status' => 'ACTIVE']]);
             exit;
         }
@@ -553,6 +731,11 @@ try {
             $parts = explode('/', $path);
             $merId = end($parts);
             $status = $input['status'] ?? 'ACTIVE';
+
+            if ($status === 'ACTIVE') {
+                PlanService::requireActivePlan($tenant['id'], $path, $db);
+            }
+
             $stmt = $db->prepare("UPDATE merchants SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?");
             $stmt->execute([$status, gmdate('Y-m-d\TH:i:s\Z'), $merId, $tenant['id']]);
             echo json_encode(['status' => true, 'message' => 'Merchant updated']);
@@ -601,10 +784,31 @@ try {
         // Force Verify Order
         if ($method === 'POST' && preg_match('#^/api/orders/([^/]+)/force-verify#', $path, $m)) {
             $orderId = $m[1];
+            $stmt = $db->prepare("SELECT * FROM orders WHERE (id = ? OR order_id = ?) AND tenant_id = ? LIMIT 1");
+            $stmt->execute([$orderId, $orderId, $tenant['id']]);
+            $order = $stmt->fetch();
+            if (!$order) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Order not found']);
+                exit;
+            }
+
+            if (($order['mode'] ?? 'LIVE') === 'LIVE' && !PlanService::isPlanActive($tenant['id'], $db)) {
+                PlanService::logAccess($tenant['id'], 'SETTLEMENT_BLOCKED', $path, 'BLOCKED', 'Active plan required for live order settlement', $db);
+                http_response_code(403);
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'PLAN_REQUIRED',
+                    'reason' => 'ACTIVE_PLAN_REQUIRED',
+                    'message' => 'Settling live payment orders requires an active subscription plan.'
+                ]);
+                exit;
+            }
+
             $utr = !empty($input['utr']) ? $input['utr'] : ('MANUAL_' . strtoupper(bin2hex(random_bytes(4))));
             $now = gmdate('Y-m-d\TH:i:s\Z');
-            $stmt = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE (id = ? OR order_id = ?) AND tenant_id = ?");
-            $stmt->execute([$utr, $now, $now, $orderId, $orderId, $tenant['id']]);
+            $stmt = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
+            $stmt->execute([$utr, $now, $now, $order['id']]);
             echo json_encode(['status' => true, 'message' => 'Order verified and settled successfully']);
             exit;
         }
@@ -627,36 +831,68 @@ try {
                 exit;
             }
 
-            // Pick specified or active merchant for this tenant
-            $merchant = null;
-            if (!empty($input['merchantAccountId'])) {
-                $stmt = $db->prepare("SELECT * FROM merchants WHERE id = ? AND tenant_id = ?");
-                $stmt->execute([$input['merchantAccountId'], $tenant['id']]);
-                $merchant = $stmt->fetch();
-            }
+            $isActive = PlanService::isPlanActive($tenant['id'], $db);
+            $mode = 'LIVE';
 
-            if (!$merchant) {
-                $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY weight DESC, RAND() LIMIT 1");
-                $stmt->execute([$tenant['id']]);
-                $merchant = $stmt->fetch();
-            }
+            if (!$isActive) {
+                // Free Test Mode: Must consume quota atomically under row lock inside transaction
+                $db->beginTransaction();
+                $allowed = PlanService::consumeTestOrderQuota($tenant['id'], $db);
+                if (!$allowed) {
+                    $db->rollBack();
+                    PlanService::logAccess($tenant['id'], 'ORDER_CREATION_BLOCKED', $path, 'BLOCKED', 'Free test limit reached (5/5)', $db);
+                    http_response_code(403);
+                    echo json_encode([
+                        'status' => false,
+                        'error' => 'PLAN_UPGRADE_REQUIRED',
+                        'reason' => 'FREE_TEST_LIMIT_REACHED',
+                        'message' => 'Free test quota reached (5/5). Please upgrade to an active plan to create more orders or connect live merchant accounts.',
+                        'data' => PlanService::getTestUsage($tenant['id'], $db)
+                    ]);
+                    exit;
+                }
 
-            // If tenant has no merchant account at all, auto-create a primary one
-            if (!$merchant) {
-                $merchantId = 'mch_' . bin2hex(random_bytes(4));
-                $merchantUpi = 'merchant@upi';
-                $merchantLabel = 'Primary UPI Gateway';
-                $merchantDisplayName = $tenant['business_name'] ?: $tenant['name'] ?: 'PayVia Merchant';
-                $now = gmdate('Y-m-d\TH:i:s\Z');
-                $insM = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, 'CUSTOM_UPI', ?, ?, ?, 10, 'ACTIVE', 1, 0, '{}', 0, ?, ?)");
-                $insM->execute([$merchantId, $tenant['id'], $merchantLabel, $merchantUpi, $merchantDisplayName, $now, $now]);
+                $mode = 'TEST';
+                // Enforce mock sandbox merchant for test orders
                 $merchant = [
-                    'id' => $merchantId,
-                    'label' => $merchantLabel,
+                    'id' => 'mch_sandbox_test',
+                    'label' => 'Sandbox Test Gateway',
                     'provider' => 'CUSTOM_UPI',
-                    'upi_id' => $merchantUpi,
-                    'display_name' => $merchantDisplayName
+                    'upi_id' => 'test@payvia',
+                    'display_name' => 'PayVia Test Sandbox'
                 ];
+            } else {
+                // Active Plan: Pick specified or active merchant for this tenant
+                $merchant = null;
+                if (!empty($input['merchantAccountId'])) {
+                    $stmt = $db->prepare("SELECT * FROM merchants WHERE id = ? AND tenant_id = ?");
+                    $stmt->execute([$input['merchantAccountId'], $tenant['id']]);
+                    $merchant = $stmt->fetch();
+                }
+
+                if (!$merchant) {
+                    $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY weight DESC, RAND() LIMIT 1");
+                    $stmt->execute([$tenant['id']]);
+                    $merchant = $stmt->fetch();
+                }
+
+                // If tenant has no merchant account at all, auto-create a primary one
+                if (!$merchant) {
+                    $merchantId = 'mch_' . bin2hex(random_bytes(4));
+                    $merchantUpi = 'merchant@upi';
+                    $merchantLabel = 'Primary UPI Gateway';
+                    $merchantDisplayName = $tenant['business_name'] ?: $tenant['name'] ?: 'PayVia Merchant';
+                    $now = gmdate('Y-m-d\TH:i:s\Z');
+                    $insM = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, 'CUSTOM_UPI', ?, ?, ?, 10, 'ACTIVE', 1, 0, '{}', 0, ?, ?)");
+                    $insM->execute([$merchantId, $tenant['id'], $merchantLabel, $merchantUpi, $merchantDisplayName, $now, $now]);
+                    $merchant = [
+                        'id' => $merchantId,
+                        'label' => $merchantLabel,
+                        'provider' => 'CUSTOM_UPI',
+                        'upi_id' => $merchantUpi,
+                        'display_name' => $merchantDisplayName
+                    ];
+                }
             }
 
             $template = !empty($input['template']) ? $input['template'] : 'template_1';
@@ -666,31 +902,49 @@ try {
             $now = gmdate('Y-m-d\TH:i:s\Z');
             $expires = gmdate('Y-m-d\TH:i:s\Z', strtotime('+15 minutes'));
 
-            $stmt = $db->prepare("INSERT INTO orders (id, order_id, tenant_id, merchant_account_id, merchant_account_label, provider, amount, currency, status, customer_mobile, customer_name, remark1, return_url, callback_url, template, link_token, payment_url, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'INR', 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-            $stmt->execute([
-                $orderId,
-                $orderId,
-                $tenant['id'],
-                $merchant['id'],
-                $merchant['label'] ?: 'Default UPI Engine',
-                $merchant['provider'] ?: 'CUSTOM_UPI',
-                $amount,
-                $input['customerMobile'] ?? $input['customer_mobile'] ?? null,
-                $input['customerName'] ?? $input['customer_name'] ?? null,
-                $input['remark1'] ?? $input['remark'] ?? 'Payment',
-                $input['return_url'] ?? $input['returnUrl'] ?? null,
-                $input['callback_url'] ?? $input['callbackUrl'] ?? null,
-                $template,
-                $linkToken,
-                $paymentUrl,
-                $expires,
-                $now,
-                $now
-            ]);
+            try {
+                $stmt = $db->prepare("INSERT INTO orders (id, order_id, tenant_id, merchant_account_id, merchant_account_label, provider, amount, currency, status, customer_mobile, customer_name, remark1, return_url, callback_url, template, link_token, payment_url, expires_at, created_at, updated_at, mode) VALUES (?, ?, ?, ?, ?, ?, ?, 'INR', 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->execute([
+                    $orderId,
+                    $orderId,
+                    $tenant['id'],
+                    $merchant['id'],
+                    $merchant['label'] ?: 'Default UPI Engine',
+                    $merchant['provider'] ?: 'CUSTOM_UPI',
+                    $amount,
+                    $input['customerMobile'] ?? $input['customer_mobile'] ?? null,
+                    $input['customerName'] ?? $input['customer_name'] ?? null,
+                    $input['remark1'] ?? $input['remark'] ?? 'Payment',
+                    $input['return_url'] ?? $input['returnUrl'] ?? null,
+                    $input['callback_url'] ?? $input['callbackUrl'] ?? null,
+                    $template,
+                    $linkToken,
+                    $paymentUrl,
+                    $expires,
+                    $now,
+                    $now,
+                    $mode
+                ]);
+
+                if ($db->inTransaction()) {
+                    $db->commit();
+                }
+
+                PlanService::logAccess($tenant['id'], 'ORDER_CREATED', $path, 'SUCCESS', "Order $orderId created in $mode mode", $db);
+            } catch (Exception $e) {
+                if ($db->inTransaction()) {
+                    $db->rollBack();
+                }
+                http_response_code(500);
+                echo json_encode(['status' => false, 'error' => 'Failed to create order: ' . $e->getMessage()]);
+                exit;
+            }
+
+            $testUsage = !$isActive ? PlanService::getTestUsage($tenant['id'], $db) : null;
 
             echo json_encode([
                 'status' => true,
-                'message' => 'Payment link created',
+                'message' => $mode === 'TEST' ? 'Test payment link created (Sandbox mode)' : 'Payment link created',
                 'data' => [
                     'orderId' => $orderId,
                     'order_id' => $orderId,
@@ -702,8 +956,11 @@ try {
                     'template' => $template,
                     'provider' => $merchant['provider'],
                     'status' => 'PENDING',
+                    'mode' => $mode,
+                    'isTest' => ($mode === 'TEST'),
                     'expiresAt' => $expires,
-                    'expires_at' => $expires
+                    'expires_at' => $expires,
+                    'testUsage' => $testUsage
                 ]
             ]);
             exit;
@@ -1351,6 +1608,18 @@ try {
                 exit;
             }
 
+            if (($order['mode'] ?? 'LIVE') === 'LIVE' && !PlanService::isPlanActive($device['tenant_id'], $db)) {
+                PlanService::logAccess($device['tenant_id'], 'DEVICE_SETTLEMENT_BLOCKED', $path, 'BLOCKED', 'Active plan required for live settlement', $db);
+                http_response_code(403);
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'PLAN_REQUIRED',
+                    'reason' => 'ACTIVE_PLAN_REQUIRED',
+                    'message' => 'Settling live payment orders requires an active subscription plan on the merchant dashboard'
+                ]);
+                exit;
+            }
+
             $now = gmdate('Y-m-d\TH:i:s\Z');
             $settleUtr = $utr ?: ('MANUAL_' . time());
             $upd = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
@@ -1763,6 +2032,8 @@ try {
                 'data' => [
                     'plan' => $plan,
                     'subscription' => $subscription,
+                    'entitlements' => PlanService::getEntitlements($tenant['id'], $db),
+                    'testUsage' => PlanService::getTestUsage($tenant['id'], $db),
                     'usage' => [
                         'merchantsUsed' => $merchantsUsed,
                         'merchantsMax' => $plan ? (int)$plan['max_merchant_accounts'] : 2,

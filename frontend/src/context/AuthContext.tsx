@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { UserTenant, Plan, TenantSubscription } from '../types';
+import { UserTenant, Plan, TenantSubscription, PlanEntitlements, PlanUsage } from '../types';
 import { ApiService } from '../services/api';
 
 export interface QuotaUsage {
@@ -16,6 +16,9 @@ interface AuthContextType {
   plan: Plan | null;
   subscription: TenantSubscription | null;
   usage: QuotaUsage | null;
+  entitlements: PlanEntitlements | null;
+  isPlanActive: boolean;
+  planUsage: PlanUsage | null;
   token: string | null;
   isLoading: boolean;
   isImpersonating: boolean;
@@ -35,6 +38,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [plan, setPlan] = useState<Plan | null>(null);
   const [subscription, setSubscription] = useState<TenantSubscription | null>(null);
   const [usage, setUsage] = useState<QuotaUsage | null>(null);
+  const [entitlements, setEntitlements] = useState<PlanEntitlements | null>(null);
+  const [planUsage, setPlanUsage] = useState<PlanUsage | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('payvia_token'));
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isImpersonating, setIsImpersonating] = useState<boolean>(() => !!localStorage.getItem('payvia_original_admin_token'));
@@ -75,6 +80,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (usageData) {
           setUsage(usageData);
         }
+
+        const entData = (subRes.status && subRes.data?.entitlements)
+          ? subRes.data.entitlements
+          : profileRes.data?.entitlements;
+        setEntitlements(entData || null);
+
+        const pusgData = (subRes.status && subRes.data?.testUsage)
+          ? subRes.data.testUsage
+          : profileRes.data?.planUsage;
+        setPlanUsage(pusgData || null);
       } else {
         logout();
       }
@@ -190,6 +205,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setImpersonatedBy(null);
   };
 
+  const isPlanActive = Boolean(
+    user?.role === 'SUPER_ADMIN' ||
+    (entitlements ? entitlements.isPlanActive : (subscription?.status === 'ACTIVE'))
+  );
+
   return (
     <AuthContext.Provider
       value={{
@@ -197,6 +217,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         plan,
         subscription,
         usage,
+        entitlements,
+        isPlanActive,
+        planUsage,
         token,
         isLoading,
         isImpersonating,

@@ -4,6 +4,8 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { TenantSubscription } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
+import { PlanService } from '../services/planService';
+
 const router = Router();
 
 // List all available plans
@@ -31,6 +33,8 @@ router.get('/current', authenticateToken, (req: AuthenticatedRequest, res: Respo
     data: {
       plan,
       subscription,
+      entitlements: PlanService.getEntitlements(tenantId),
+      testUsage: PlanService.getTestUsage(tenantId),
       usage: {
         merchantsUsed: activeMerchantsCount,
         merchantsMax: plan.maxMerchantAccounts,

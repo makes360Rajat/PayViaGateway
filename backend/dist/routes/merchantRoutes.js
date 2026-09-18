@@ -4,6 +4,7 @@ const express_1 = require("express");
 const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
 const uuid_1 = require("uuid");
+const planService_1 = require("../services/planService");
 const router = (0, express_1.Router)();
 // List all merchant accounts for tenant
 router.get('/', auth_1.authenticateToken, (req, res) => {
@@ -15,6 +16,15 @@ router.get('/', auth_1.authenticateToken, (req, res) => {
 router.post('/create', auth_1.authenticateToken, (req, res) => {
     try {
         const tenantId = req.tenant.id;
+        if (!planService_1.PlanService.isPlanActive(tenantId)) {
+            planService_1.PlanService.logAccess(tenantId, 'MERCHANT_CONNECTION_BLOCKED', '/api/merchants/create', 'BLOCKED', 'Active plan required');
+            return res.status(403).json({
+                status: false,
+                error: 'PLAN_REQUIRED',
+                reason: 'ACTIVE_PLAN_REQUIRED',
+                message: 'Connecting merchant accounts to receive live payments requires an active subscription plan. Please upgrade your plan.'
+            });
+        }
         const tenant = req.tenant;
         const plan = database_1.db.plans.find(p => p.id === tenant.planId) || database_1.db.plans[0];
         const currentAccountsCount = database_1.db.merchants.filter(m => m.tenantId === tenantId).length;

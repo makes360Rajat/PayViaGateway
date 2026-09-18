@@ -24,7 +24,7 @@ interface NavbarProps {
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggleMobileMenu }) => {
-  const { user, plan, subscription, usage, refreshProfile, logout } = useAuth();
+  const { user, plan, subscription, usage, entitlements, isPlanActive, planUsage, refreshProfile, logout } = useAuth();
 
   useEffect(() => {
     if (user) {
@@ -49,6 +49,10 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
   const ordersMax = usage?.ordersMax ?? plan?.maxOrdersPerDay ?? (plan as any)?.max_orders_per_day ?? (user?.role === 'SUPER_ADMIN' ? '∞' : 2000);
   const maxNum = typeof ordersMax === 'number' ? ordersMax : (typeof ordersMax === 'string' && !isNaN(Number(ordersMax)) ? Number(ordersMax) : 2000);
   const progressPercent = Math.min(100, Math.max(6, Math.round((Number(ordersToday) / (maxNum || 1)) * 100)));
+
+  const testOrdersUsed = entitlements?.testOrdersUsed ?? planUsage?.used ?? 0;
+  const testOrdersMax = entitlements?.testOrdersMax ?? planUsage?.limit ?? 5;
+  const testOrdersRemaining = entitlements?.testOrdersRemaining ?? planUsage?.remaining ?? Math.max(0, testOrdersMax - testOrdersUsed);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-[#070b14]/90 backdrop-blur-xl transition-all duration-300">
@@ -143,46 +147,93 @@ export const Navbar: React.FC<NavbarProps> = ({ onNavigate, currentPage, onToggl
                 </button>
               )}
 
-              {/* Creative & Dynamic Package / Daily Orders Quota Card */}
-              <div 
-                onClick={() => onNavigate('plans')}
-                className="group relative flex flex-col justify-center rounded-2xl border border-amber-500/35 bg-[#101422]/90 backdrop-blur-md px-3.5 py-1.5 shadow-glow-amber cursor-pointer hover:border-amber-400/60 hover:bg-[#151a2e] transition-all duration-300 select-none"
-                title="View Subscription Plans & Daily Quota"
-              >
-                {/* Top Row: Plan Name + Pulsing Active Indicator */}
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
-                    <span className="text-[11.5px] font-extrabold text-amber-300 font-display tracking-wide group-hover:text-amber-200 transition">
-                      {plan?.name || (user?.role === 'SUPER_ADMIN' ? 'Enterprise VIP' : 'Pro Plan')}
+              {/* Package & Quota Card: Active Pro Plan vs Free Test Mode */}
+              {!isPlanActive ? (
+                <div 
+                  onClick={() => onNavigate('plans')}
+                  className="group relative flex flex-col justify-center rounded-2xl border border-amber-500/50 bg-gradient-to-r from-amber-950/40 to-[#12162a]/90 backdrop-blur-md px-3.5 py-1.5 shadow-[0_0_20px_rgba(245,158,11,0.15)] cursor-pointer hover:border-amber-400 hover:bg-[#181e36] transition-all duration-300 select-none"
+                  title="Free Test Mode: 5 Test Orders Limit. Click to Upgrade to Live Payments."
+                >
+                  {/* Top Row: Free Test Badge + Upgrade Callout */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-amber-400 animate-pulse" />
+                      <span className="text-[11.5px] font-extrabold text-amber-300 font-display tracking-wide group-hover:text-amber-200 transition">
+                        ✦ FREE TEST
+                      </span>
+                    </div>
+                    <span className="flex items-center gap-1 text-[9px] font-mono font-bold text-black bg-amber-400 px-2 py-0.5 rounded-full group-hover:bg-amber-300 transition shadow-sm">
+                      UPGRADE NOW
                     </span>
                   </div>
-                  <span className="flex items-center gap-1 text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                    ACTIVE
-                  </span>
-                </div>
 
-                {/* Bottom Row: Daily Orders Quota */}
-                <div className="mt-1 flex items-center justify-between gap-3 text-[10px] font-mono">
-                  <span className="text-slate-400 font-sans font-medium text-[10px]">Daily Orders Quota</span>
-                  <span className="font-bold text-white tracking-wider">
-                    <span className="text-emerald-400 font-bold">{ordersToday}</span>
-                    <span className="text-slate-500 mx-1">/</span>
-                    <span className="text-amber-200 font-bold">{ordersMax}</span>
-                  </span>
-                </div>
+                  {/* Bottom Row: Test Orders Quota */}
+                  <div className="mt-1 flex items-center justify-between gap-3 text-[10px] font-mono">
+                    <span className="text-amber-200/80 font-sans font-medium text-[10px]">Test Orders</span>
+                    <span className="font-bold tracking-wider">
+                      <span className={testOrdersRemaining > 0 ? "text-amber-300 font-bold" : "text-rose-400 font-bold"}>
+                        {testOrdersUsed}
+                      </span>
+                      <span className="text-slate-500 mx-1">/</span>
+                      <span className="text-slate-400 font-bold">{testOrdersMax}</span>
+                    </span>
+                  </div>
 
-                {/* Mini Dynamic Animated Progress Bar */}
-                <div className="mt-1.5 h-1 w-full bg-slate-800/80 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400 rounded-full transition-all duration-500 shadow-sm"
-                    style={{ 
-                      width: `${progressPercent}%` 
-                    }}
-                  />
+                  {/* Dynamic Progress Bar */}
+                  <div className="mt-1.5 h-1 w-full bg-slate-800 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        testOrdersUsed >= testOrdersMax
+                          ? 'bg-gradient-to-r from-rose-500 to-rose-400'
+                          : 'bg-gradient-to-r from-amber-400 to-orange-400'
+                      }`}
+                      style={{ 
+                        width: `${Math.min(100, Math.max(8, Math.round((testOrdersUsed / (testOrdersMax || 1)) * 100)))}%` 
+                      }}
+                    />
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div 
+                  onClick={() => onNavigate('plans')}
+                  className="group relative flex flex-col justify-center rounded-2xl border border-emerald-500/35 bg-[#101422]/90 backdrop-blur-md px-3.5 py-1.5 shadow-glow cursor-pointer hover:border-emerald-400/60 hover:bg-[#151a2e] transition-all duration-300 select-none"
+                  title="View Subscription Plans & Daily Quota"
+                >
+                  {/* Top Row: Plan Name + Pulsing Active Indicator */}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-emerald-400 animate-pulse" />
+                      <span className="text-[11.5px] font-extrabold text-emerald-300 font-display tracking-wide group-hover:text-emerald-200 transition">
+                        {plan?.name || (user?.role === 'SUPER_ADMIN' ? 'Enterprise VIP' : 'Pro Plan')}
+                      </span>
+                    </div>
+                    <span className="flex items-center gap-1 text-[9px] font-mono font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      ACTIVE
+                    </span>
+                  </div>
+
+                  {/* Bottom Row: Daily Orders Quota */}
+                  <div className="mt-1 flex items-center justify-between gap-3 text-[10px] font-mono">
+                    <span className="text-slate-400 font-sans font-medium text-[10px]">Daily Orders Quota</span>
+                    <span className="font-bold text-white tracking-wider">
+                      <span className="text-emerald-400 font-bold">{ordersToday}</span>
+                      <span className="text-slate-500 mx-1">/</span>
+                      <span className="text-emerald-200 font-bold">{ordersMax}</span>
+                    </span>
+                  </div>
+
+                  {/* Mini Dynamic Animated Progress Bar */}
+                  <div className="mt-1.5 h-1 w-full bg-slate-800/80 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-emerald-500 via-teal-400 to-cyan-400 rounded-full transition-all duration-500 shadow-sm"
+                      style={{ 
+                        width: `${progressPercent}%` 
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* User Dropdown / Controls */}
               <div className="flex items-center gap-2 border-l border-white/10 pl-3">

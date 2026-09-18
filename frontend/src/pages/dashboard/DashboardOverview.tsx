@@ -27,7 +27,7 @@ interface DashboardOverviewProps {
 }
 
 export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate }) => {
-  const { user, plan } = useAuth();
+  const { user, plan, isPlanActive, entitlements, planUsage } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [merchants, setMerchants] = useState<MerchantAccount[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
@@ -94,10 +94,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
             <h1 className="font-display text-2xl font-bold text-white tracking-tight">
               Dashboard
             </h1>
-            <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 font-mono flex items-center gap-1.5 shadow-glow">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
-              <span>LIVE</span>
-            </span>
+            {isPlanActive ? (
+              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 font-mono flex items-center gap-1.5 shadow-glow">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                <span>LIVE</span>
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-500/15 border border-amber-500/40 px-2.5 py-0.5 text-[10px] font-bold text-amber-300 font-mono flex items-center gap-1.5 shadow-glow-amber">
+                <Sparkles className="h-3 w-3 text-amber-400" />
+                <span>FREE TEST MODE</span>
+              </span>
+            )}
           </div>
           <p className="mt-0.5 text-xs text-slate-400">
             Real-time settlement overview across {merchants.length} merchant routes and {devices.length} SMS gateway devices.
@@ -131,6 +138,35 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </button>
         </div>
       </div>
+
+      {/* Free Test Mode Account Ribbon */}
+      {!isPlanActive && (
+        <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-[#181624] to-[#0c0e18] p-5 backdrop-blur-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-[0_0_30px_rgba(245,158,11,0.1)]">
+          <div className="flex items-center gap-3.5">
+            <div className="h-10 w-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 shadow-sm">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-display font-bold text-sm text-amber-300">Free Test Mode Active</span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-400 text-black font-extrabold">
+                  {entitlements?.testOrdersUsed ?? planUsage?.used ?? 0} / {entitlements?.testOrdersMax ?? planUsage?.limit ?? 5} TEST ORDERS USED
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Connecting live merchant accounts and collecting customer UPI payments requires upgrading your plan.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate('plans')}
+            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 hover:brightness-110 text-black px-5 py-2.5 text-xs font-bold transition active:scale-95 shadow-glow-amber shrink-0"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Upgrade to Live Plan →</span>
+          </button>
+        </div>
+      )}
 
       {/* Metrics Row (5 Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

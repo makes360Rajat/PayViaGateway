@@ -4,6 +4,7 @@ const express_1 = require("express");
 const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
 const uuid_1 = require("uuid");
+const planService_1 = require("../services/planService");
 const router = (0, express_1.Router)();
 // List all available plans
 router.get('/', (req, res) => {
@@ -25,6 +26,8 @@ router.get('/current', auth_1.authenticateToken, (req, res) => {
         data: {
             plan,
             subscription,
+            entitlements: planService_1.PlanService.getEntitlements(tenantId),
+            testUsage: planService_1.PlanService.getTestUsage(tenantId),
             usage: {
                 merchantsUsed: activeMerchantsCount,
                 merchantsMax: plan.maxMerchantAccounts,

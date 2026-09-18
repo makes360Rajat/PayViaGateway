@@ -11,7 +11,8 @@ import {
   Order,
   WebhookLog,
   SmsLog,
-  TenantTemplateSettings
+  TenantTemplateSettings,
+  PlanUsage
 } from '../types';
 import { MySQLClient } from './mysql';
 
@@ -26,6 +27,7 @@ export interface DatabaseSchema {
   webhookLogs: WebhookLog[];
   smsLogs: SmsLog[];
   templateSettings: TenantTemplateSettings[];
+  planUsage: PlanUsage[];
 }
 
 const DB_FILE_PATH = path.join(__dirname, '../../data/database.json');
@@ -458,7 +460,8 @@ class Database {
       orders,
       webhookLogs,
       smsLogs: [],
-      templateSettings
+      templateSettings,
+      planUsage: []
     };
   }
 
@@ -473,6 +476,7 @@ class Database {
   public get webhookLogs(): WebhookLog[] { return this.data.webhookLogs; }
   public get smsLogs(): SmsLog[] { return this.data.smsLogs; }
   public get templateSettings(): TenantTemplateSettings[] { return this.data.templateSettings; }
+  public get planUsage(): PlanUsage[] { if (!this.data.planUsage) this.data.planUsage = []; return this.data.planUsage; }
 
   // Helpers
   public findTenantById(id: string): Tenant | undefined {

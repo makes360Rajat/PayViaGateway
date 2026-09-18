@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { ApiService } from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { MerchantAccount, PaymentProviderType } from '../../types';
 import QRCode from 'qrcode';
 import { 
@@ -132,11 +133,17 @@ const PROVIDERS: ProviderConfig[] = [
   }
 ];
 
-export const MerchantsManager: React.FC = () => {
+interface MerchantsManagerProps {
+  onNavigate?: (page: string) => void;
+}
+
+export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }) => {
+  const { isPlanActive, entitlements, planUsage } = useAuth();
   const [merchants, setMerchants] = useState<MerchantAccount[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterProvider, setFilterProvider] = useState<string>('ALL');
+  const [showPlanModal, setShowPlanModal] = useState(false);
 
   // In-Page Add / Connect Modal State
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
@@ -199,6 +206,10 @@ export const MerchantsManager: React.FC = () => {
   }, []);
 
   const handleStartAddProvider = (providerId: PaymentProviderType) => {
+    if (!isPlanActive) {
+      setShowPlanModal(true);
+      return;
+    }
     const provConfig = PROVIDERS.find(p => p.id === providerId);
     setBuilderProvider(providerId);
     setLabel(`${provConfig?.name || providerId} Store`);
@@ -217,6 +228,11 @@ export const MerchantsManager: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPlanActive) {
+      setIsBuilderOpen(false);
+      setShowPlanModal(true);
+      return;
+    }
     setIsSubmitting(true);
 
     const credentials: any = {};
@@ -458,6 +474,39 @@ export const MerchantsManager: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Plan Required Warning Banner (Free Test Mode) */}
+      {!isPlanActive && (
+        <div className="rounded-3xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-[#181624] to-[#0d0f1a] p-6 backdrop-blur-xl flex flex-col md:flex-row md:items-center justify-between gap-5 shadow-[0_0_35px_rgba(245,158,11,0.12)]">
+          <div className="flex items-start gap-4">
+            <div className="h-12 w-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 mt-0.5 shadow-sm">
+              <AlertCircle className="h-6 w-6" />
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h3 className="font-display text-base font-bold text-amber-300">
+                  Active Subscription Plan Required to Receive Live Payments
+                </h3>
+                <span className="text-[10px] font-mono font-extrabold px-2.5 py-0.5 rounded-full bg-amber-400 text-black">
+                  ✦ FREE TEST MODE
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
+                Your gateway account is currently running in Free Test Mode (allowance: 
+                <strong className="text-amber-300 font-mono ml-1 mr-1">{entitlements?.testOrdersUsed ?? planUsage?.used ?? 0} / {entitlements?.testOrdersMax ?? planUsage?.limit ?? 5} test orders used</strong>).
+                Connecting live merchant accounts (Paytm, BharatPe, FamPay, Custom UPI, etc.) to receive real customer payments requires upgrading to an active gateway subscription plan.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => onNavigate ? onNavigate('plans') : (window.location.href = '#plans')}
+            className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 hover:brightness-110 text-black px-6 py-3 text-xs font-bold transition active:scale-95 shadow-glow-amber shrink-0"
+          >
+            <Sparkles className="h-4 w-4" />
+            <span>Upgrade Plan Now</span>
+          </button>
+        </div>
+      )}
 
       {/* Provider Hub: Vibrant Category Cards */}
       <div className="space-y-3">
@@ -1152,6 +1201,74 @@ export const MerchantsManager: React.FC = () => {
                 className="rounded-xl bg-gradient-primary px-4 py-1.5 text-xs font-bold text-white"
               >
                 {isVerifyingOtp ? 'Verifying...' : 'Verify OTP'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* ACTIVE PLAN REQUIRED MODAL */}
+      {/* ==================================================================== */}
+      {showPlanModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-md rounded-3xl bg-[#121324] border border-amber-500/40 p-6 sm:p-8 shadow-[0_0_50px_rgba(245,158,11,0.25)] space-y-5 text-center relative overflow-hidden">
+            <div className="absolute -top-12 -right-12 w-40 h-40 bg-amber-500/20 blur-[80px] rounded-full pointer-events-none" />
+            
+            <div className="h-16 w-16 rounded-3xl bg-amber-500/20 border border-amber-500/40 mx-auto flex items-center justify-center text-amber-400 shadow-glow-amber">
+              <Lock className="h-8 w-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[10px] font-mono font-extrabold px-3 py-1 rounded-full bg-amber-400 text-black inline-block uppercase tracking-wider">
+                ✦ Active Plan Required
+              </span>
+              <h3 className="font-display text-xl sm:text-2xl font-black text-white">
+                Unlock Live Payment Accounts
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
+                Connecting Paytm, BharatPe, FamPay, Freecharge, or Custom UPI accounts to collect real customer money requires an active subscription.
+              </p>
+            </div>
+
+            {/* Test Quota Summary */}
+            <div className="rounded-2xl bg-black/40 border border-white/10 p-4 text-left space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-400">Current Mode:</span>
+                <span className="font-bold text-amber-300">Free Test Mode</span>
+              </div>
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-400">Free Test Orders:</span>
+                <span className="font-bold text-white">
+                  {entitlements?.testOrdersUsed ?? planUsage?.used ?? 0} / {entitlements?.testOrdersMax ?? planUsage?.limit ?? 5} Used
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-amber-400 rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.min(100, Math.round(((entitlements?.testOrdersUsed ?? planUsage?.used ?? 0) / (entitlements?.testOrdersMax ?? planUsage?.limit ?? 5)) * 100))}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2.5 pt-2">
+              <button
+                onClick={() => {
+                  setShowPlanModal(false);
+                  if (onNavigate) onNavigate('plans');
+                }}
+                className="w-full rounded-2xl bg-gradient-to-r from-amber-400 to-orange-400 hover:brightness-110 text-black py-3 text-xs font-black shadow-glow-amber transition active:scale-95 flex items-center justify-center gap-2 tracking-wide"
+              >
+                <Sparkles className="h-4 w-4" />
+                <span>View Plans & Upgrade Now →</span>
+              </button>
+              <button
+                onClick={() => setShowPlanModal(false)}
+                className="w-full rounded-xl bg-white/5 hover:bg-white/10 py-2.5 text-xs font-semibold text-slate-400 hover:text-white transition"
+              >
+                Stay in Test Mode
               </button>
             </div>
           </div>

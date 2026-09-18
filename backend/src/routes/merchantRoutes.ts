@@ -3,6 +3,7 @@ import { db } from '../db/database';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { MerchantAccount, PaymentProviderType } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { PlanService } from '../services/planService';
 
 const router = Router();
 
@@ -17,6 +18,17 @@ router.get('/', authenticateToken, (req: AuthenticatedRequest, res: Response) =>
 router.post('/create', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   try {
     const tenantId = req.tenant!.id;
+
+    if (!PlanService.isPlanActive(tenantId)) {
+      PlanService.logAccess(tenantId, 'MERCHANT_CONNECTION_BLOCKED', '/api/merchants/create', 'BLOCKED', 'Active plan required');
+      return res.status(403).json({
+        status: false,
+        error: 'PLAN_REQUIRED',
+        reason: 'ACTIVE_PLAN_REQUIRED',
+        message: 'Connecting merchant accounts to receive live payments requires an active subscription plan. Please upgrade your plan.'
+      });
+    }
+
     const tenant = req.tenant!;
     const plan = db.plans.find(p => p.id === tenant.planId) || db.plans[0];
     const currentAccountsCount = db.merchants.filter(m => m.tenantId === tenantId).length;

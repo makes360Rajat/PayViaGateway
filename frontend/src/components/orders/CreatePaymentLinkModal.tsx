@@ -28,7 +28,12 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
   onClose,
   onOrderCreated
 }) => {
-  const { refreshProfile } = useAuth();
+  const { isPlanActive, entitlements, planUsage, refreshProfile } = useAuth();
+  const testOrdersUsed = entitlements?.testOrdersUsed ?? planUsage?.used ?? 0;
+  const testOrdersMax = entitlements?.testOrdersMax ?? planUsage?.limit ?? 5;
+  const testOrdersRemaining = entitlements?.testOrdersRemaining ?? planUsage?.remaining ?? Math.max(0, testOrdersMax - testOrdersUsed);
+  const isLimitReached = !isPlanActive && testOrdersRemaining <= 0;
+
   const [amount, setAmount] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
@@ -165,9 +170,25 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
             </div>
 
             <div>
+              <div className="flex items-center justify-center gap-2 mb-1">
+                {(createdOrder.isTest || createdOrder.mode === 'TEST') ? (
+                  <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    ✦ TEST SANDBOX LINK
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    ● LIVE PAYMENT LINK
+                  </span>
+                )}
+              </div>
               <h4 className="font-display text-lg font-bold text-white">Payment Link Ready!</h4>
               <p className="text-xs text-slate-400 mt-0.5">Order ID: <span className="font-mono text-purple-300 font-bold">{createdOrder.orderId}</span></p>
               <div className="text-2xl font-black text-emerald-400 font-display mt-2">₹{Number(createdOrder.amount).toFixed(2)}</div>
+              {(createdOrder.isTest || createdOrder.mode === 'TEST') && (
+                <p className="text-[11px] text-amber-300/90 font-mono mt-1">
+                  Test orders remaining: {Math.max(0, testOrdersRemaining)} / {testOrdersMax}
+                </p>
+              )}
             </div>
 
             {/* QR Preview */}
@@ -214,6 +235,29 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
         ) : (
           /* Input Form */
           <form onSubmit={handleSubmit} className="space-y-4">
+            
+            {/* Free Test Mode Ribbon */}
+            {!isPlanActive && (
+              <div className={`p-4 rounded-2xl border ${isLimitReached ? 'border-rose-500/50 bg-rose-950/30' : 'border-amber-500/40 bg-amber-950/30'} flex items-start gap-3`}>
+                <Sparkles className={`h-5 w-5 ${isLimitReached ? 'text-rose-400' : 'text-amber-400'} shrink-0 mt-0.5`} />
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${isLimitReached ? 'bg-rose-500/20 text-rose-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                      ✦ FREE TEST MODE
+                    </span>
+                    <span className="text-xs font-mono text-slate-300">
+                      Quota: <strong className={isLimitReached ? "text-rose-400" : "text-amber-300"}>{testOrdersUsed} / {testOrdersMax}</strong> used
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300">
+                    {isLimitReached
+                      ? 'Free test order quota reached (5/5). Upgrade your gateway plan to create live orders and connect real UPI merchant accounts.'
+                      : 'Test links run in simulated sandbox mode. Real customer funds and live routing require an active gateway plan.'
+                    }
+                  </p>
+                </div>
+              </div>
+            )}
             
             {/* Amount & Presets */}
             <div>
@@ -324,40 +368,63 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
                 <label className="block text-xs font-medium text-slate-400 mb-1">
                   Settlement Route
                 </label>
-                <select
-                  value={selectedMerchantId}
-                  onChange={(e) => setSelectedMerchantId(e.target.value)}
-                  className="w-full rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
-                >
-                  <option value="">⚡ Auto-Routed (Smart Rotation)</option>
-                  {merchants.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label} ({m.provider})
-                    </option>
-                  ))}
-                </select>
+                {!isPlanActive ? (
+                  <div className="w-full rounded-xl bg-slate-900/60 border border-amber-500/30 px-3 py-2 text-xs text-amber-300 flex items-center gap-1.5 font-mono">
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    <span>PayVia Test Sandbox (Simulated)</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedMerchantId}
+                    onChange={(e) => setSelectedMerchantId(e.target.value)}
+                    className="w-full rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-xs text-white focus:border-purple-500 focus:outline-none"
+                  >
+                    <option value="">⚡ Auto-Routed (Smart Rotation)</option>
+                    {merchants.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label} ({m.provider})
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition"
-              >
-                Cancel
-              </button>
+            {isLimitReached ? (
+              <div className="pt-4 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    window.dispatchEvent(new CustomEvent('payvia_navigate', { detail: 'plans' }));
+                  }}
+                  className="w-full rounded-xl bg-gradient-to-r from-amber-400 to-orange-400 hover:brightness-110 text-black py-3 text-xs font-black shadow-glow-amber transition active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  <span>Upgrade Plan to Unlock Live Orders →</span>
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-400 hover:bg-white/5 hover:text-white transition"
+                >
+                  Cancel
+                </button>
 
-              <button
-                type="submit"
-                disabled={isSubmitting || !amount}
-                className="rounded-xl bg-gradient-primary px-6 py-2.5 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition disabled:opacity-50 flex items-center gap-2"
-              >
-                <PlusCircle className="h-4 w-4" />
-                <span>{isSubmitting ? 'Generating Link...' : 'Create Payment Link →'}</span>
-              </button>
-            </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || !amount}
+                  className="rounded-xl bg-gradient-primary px-6 py-2.5 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition disabled:opacity-50 flex items-center gap-2"
+                >
+                  <PlusCircle className="h-4 w-4" />
+                  <span>{isSubmitting ? 'Generating Link...' : (!isPlanActive ? 'Create Test Link (Sandbox) →' : 'Create Payment Link →')}</span>
+                </button>
+              </div>
+            )}
           </form>
         )}
 

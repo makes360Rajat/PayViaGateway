@@ -5,6 +5,7 @@ import { db } from '../db/database';
 import { JWT_SECRET, authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { Tenant, TenantSubscription } from '../types';
 import { v4 as uuidv4 } from 'uuid';
+import { PlanService } from '../services/planService';
 
 const router = Router();
 
@@ -43,12 +44,22 @@ router.post('/register', async (req: Request, res: Response) => {
       id: `sub_${uuidv4().slice(0, 8)}`,
       tenantId: newTenant.id,
       planId: 'plan_starter',
-      status: 'ACTIVE',
+      status: 'PENDING_PAYMENT',
       startsAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
       ordersToday: 0,
       lastResetDate: new Date().toISOString().slice(0, 10)
     };
+
+    const newPlanUsage = {
+      id: `pusg_${uuidv4().slice(0, 8)}`,
+      tenantId: newTenant.id,
+      testOrdersUsed: 0,
+      testOrdersLimit: 5,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    db.planUsage.push(newPlanUsage);
 
     // Auto-generate a primary API key
     const rawApiKey = `pv_live_${uuidv4().replace(/-/g, '')}`;
@@ -183,7 +194,9 @@ router.get('/me', authenticateToken, (req: AuthenticatedRequest, res: Response) 
         createdAt: tenant.createdAt
       },
       plan,
-      subscription
+      subscription,
+      entitlements: PlanService.getEntitlements(tenant.id),
+      planUsage: PlanService.getTestUsage(tenant.id)
     }
   });
 });

@@ -420,7 +420,8 @@ class Database {
             orders,
             webhookLogs,
             smsLogs: [],
-            templateSettings
+            templateSettings,
+            planUsage: []
         };
     }
     // Getters
@@ -434,6 +435,8 @@ class Database {
     get webhookLogs() { return this.data.webhookLogs; }
     get smsLogs() { return this.data.smsLogs; }
     get templateSettings() { return this.data.templateSettings; }
+    get planUsage() { if (!this.data.planUsage)
+        this.data.planUsage = []; return this.data.planUsage; }
     // Helpers
     findTenantById(id) {
         return this.data.tenants.find(t => t.id === id);

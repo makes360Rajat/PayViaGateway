@@ -9,6 +9,7 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
 const uuid_1 = require("uuid");
+const planService_1 = require("../services/planService");
 const router = (0, express_1.Router)();
 // Register new merchant account
 router.post('/register', async (req, res) => {
@@ -40,12 +41,21 @@ router.post('/register', async (req, res) => {
             id: `sub_${(0, uuid_1.v4)().slice(0, 8)}`,
             tenantId: newTenant.id,
             planId: 'plan_starter',
-            status: 'ACTIVE',
+            status: 'PENDING_PAYMENT',
             startsAt: new Date().toISOString(),
             expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
             ordersToday: 0,
             lastResetDate: new Date().toISOString().slice(0, 10)
         };
+        const newPlanUsage = {
+            id: `pusg_${(0, uuid_1.v4)().slice(0, 8)}`,
+            tenantId: newTenant.id,
+            testOrdersUsed: 0,
+            testOrdersLimit: 5,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        database_1.db.planUsage.push(newPlanUsage);
         // Auto-generate a primary API key
         const rawApiKey = `pv_live_${(0, uuid_1.v4)().replace(/-/g, '')}`;
         const keyHash = bcryptjs_1.default.hashSync(rawApiKey, salt);
@@ -159,7 +169,9 @@ router.get('/me', auth_1.authenticateToken, (req, res) => {
                 createdAt: tenant.createdAt
             },
             plan,
-            subscription
+            subscription,
+            entitlements: planService_1.PlanService.getEntitlements(tenant.id),
+            planUsage: planService_1.PlanService.getTestUsage(tenant.id)
         }
     });
 });

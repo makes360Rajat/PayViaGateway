@@ -51,15 +51,44 @@ export interface Plan {
   isActive: boolean;
 }
 
+export type SubscriptionStatus = 
+  | 'NO_PLAN' 
+  | 'FREE_TEST' 
+  | 'ACTIVE' 
+  | 'EXPIRED' 
+  | 'CANCELLED' 
+  | 'SUSPENDED' 
+  | 'PENDING_PAYMENT';
+
 export interface TenantSubscription {
   id: string;
   tenantId: string;
   planId: string;
-  status: 'ACTIVE' | 'EXPIRED' | 'CANCELLED';
+  status: SubscriptionStatus | string;
   startsAt: string;
   expiresAt: string;
   ordersToday: number;
   lastResetDate: string;
+}
+
+export interface PlanUsage {
+  id?: string;
+  tenantId?: string;
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+export interface PlanEntitlements {
+  status: SubscriptionStatus | string;
+  isPlanActive: boolean;
+  isFreeTesting: boolean;
+  testOrdersUsed: number;
+  testOrdersMax: number;
+  testOrdersRemaining: number;
+  canConnectMerchant: boolean;
+  canReceiveLivePayments: boolean;
+  canCreateTestOrders: boolean;
 }
 
 export interface MerchantAccount {
@@ -138,6 +167,8 @@ export interface Order {
   linkToken: string;
   paymentUrl: string;
   status: OrderStatus;
+  mode?: 'LIVE' | 'TEST';
+  isTest?: boolean;
   utr?: string;
   gatewayTxnId?: string;
   payerVpa?: string;

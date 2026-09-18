@@ -6,6 +6,7 @@ const auth_1 = require("../middleware/auth");
 const routerEngine_1 = require("../services/routerEngine");
 const detectionEngine_1 = require("../services/detectionEngine");
 const webhookService_1 = require("../services/webhookService");
+const planService_1 = require("../services/planService");
 const uuid_1 = require("uuid");
 const router = (0, express_1.Router)();
 const BASE_FRONTEND_URL = process.env.FRONTEND_URL || 'https://payvia360.com';
@@ -17,6 +18,22 @@ router.post('/public/v1/order/create', auth_1.authenticateApiKey, (req, res) => 
     try {
         const tenant = req.tenant;
         const apiKey = req.apiKey;
+        const isPlanActive = planService_1.PlanService.isPlanActive(tenant.id);
+        let mode = 'LIVE';
+        if (!isPlanActive) {
+            const allowed = planService_1.PlanService.consumeTestOrderQuota(tenant.id);
+            if (!allowed) {
+                planService_1.PlanService.logAccess(tenant.id, 'ORDER_CREATION_BLOCKED', req.originalUrl, 'BLOCKED', 'Free test limit reached (5/5)');
+                return res.status(403).json({
+                    status: false,
+                    error: 'PLAN_UPGRADE_REQUIRED',
+                    reason: 'FREE_TEST_LIMIT_REACHED',
+                    message: 'Free test quota reached (5/5). Please upgrade to an active plan to create more orders or connect live merchant accounts.',
+                    data: planService_1.PlanService.getTestUsage(tenant.id)
+                });
+            }
+            mode = 'TEST';
+        }
         const { amount, customer_mobile, customer_name, customer_email, remark1, remark2, return_url, callback_url, template } = req.body;
         const parsedAmount = parseFloat(amount);
         if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -39,8 +56,14 @@ router.post('/public/v1/order/create', auth_1.authenticateApiKey, (req, res) => 
             }
             subscription.ordersToday += 1;
         }
-        // Resolve Merchant Account via Weighted Router Engine
-        const merchantAccount = routerEngine_1.RouterEngine.selectMerchantAccount(tenant.id, apiKey);
+        // Resolve Merchant Account via Weighted Router Engine or Sandbox Test Gateway
+        const merchantAccount = mode === 'TEST' ? {
+            id: 'mch_sandbox_test',
+            label: 'Sandbox Test Gateway',
+            provider: 'CUSTOM_UPI',
+            upiId: 'test@payvia',
+            displayName: 'PayVia Test Sandbox'
+        } : routerEngine_1.RouterEngine.selectMerchantAccount(tenant.id, apiKey);
         // Resolve Payment Page Template
         const resolvedTemplate = template || routerEngine_1.RouterEngine.resolveTemplate(tenant.id, apiKey);
         // Generate Unique Token and Order ID
@@ -79,6 +102,7 @@ router.post('/public/v1/order/create', auth_1.authenticateApiKey, (req, res) => 
             linkToken,
             paymentUrl,
             status: 'PENDING',
+            mode,
             expiresAt,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -87,6 +111,7 @@ router.post('/public/v1/order/create', auth_1.authenticateApiKey, (req, res) => 
         database_1.db.save();
         return res.status(200).json({
             status: true,
+            message: mode === 'TEST' ? 'Test payment link created (Sandbox mode)' : 'Payment link created',
             data: {
                 order_id: newOrder.orderId,
                 provider: newOrder.provider,
@@ -96,7 +121,11 @@ router.post('/public/v1/order/create', auth_1.authenticateApiKey, (req, res) => 
                 template: newOrder.template,
                 payment_url: newOrder.paymentUrl,
                 link_token: newOrder.linkToken,
-                expires_at: newOrder.expiresAt
+                status: newOrder.status,
+                mode: newOrder.mode,
+                isTest: newOrder.mode === 'TEST',
+                expires_at: newOrder.expiresAt,
+                testUsage: mode === 'TEST' ? planService_1.PlanService.getTestUsage(tenant.id) : undefined
             }
         });
     }
@@ -192,12 +221,39 @@ router.post('/create-manual', auth_1.authenticateToken, (req, res) => {
         if (isNaN(parsedAmount) || parsedAmount <= 0) {
             return res.status(400).json({ status: false, error: 'Enter a valid amount' });
         }
-        let merchantAccount;
-        if (merchantAccountId) {
-            merchantAccount = database_1.db.merchants.find(m => m.id === merchantAccountId && m.tenantId === tenant.id);
+        const isPlanActive = planService_1.PlanService.isPlanActive(tenant.id);
+        let mode = 'LIVE';
+        if (!isPlanActive) {
+            const allowed = planService_1.PlanService.consumeTestOrderQuota(tenant.id);
+            if (!allowed) {
+                planService_1.PlanService.logAccess(tenant.id, 'ORDER_CREATION_BLOCKED', req.originalUrl, 'BLOCKED', 'Free test limit reached (5/5)');
+                return res.status(403).json({
+                    status: false,
+                    error: 'PLAN_UPGRADE_REQUIRED',
+                    reason: 'FREE_TEST_LIMIT_REACHED',
+                    message: 'Free test quota reached (5/5). Please upgrade to an active plan to create more orders or connect live merchant accounts.',
+                    data: planService_1.PlanService.getTestUsage(tenant.id)
+                });
+            }
+            mode = 'TEST';
         }
-        if (!merchantAccount) {
-            merchantAccount = routerEngine_1.RouterEngine.selectMerchantAccount(tenant.id);
+        let merchantAccount;
+        if (mode === 'TEST') {
+            merchantAccount = {
+                id: 'mch_sandbox_test',
+                label: 'Sandbox Test Gateway',
+                provider: 'CUSTOM_UPI',
+                upiId: 'test@payvia',
+                displayName: 'PayVia Test Sandbox'
+            };
+        }
+        else {
+            if (merchantAccountId) {
+                merchantAccount = database_1.db.merchants.find(m => m.id === merchantAccountId && m.tenantId === tenant.id);
+            }
+            if (!merchantAccount) {
+                merchantAccount = routerEngine_1.RouterEngine.selectMerchantAccount(tenant.id);
+            }
         }
         const resolvedTemplate = template || routerEngine_1.RouterEngine.resolveTemplate(tenant.id);
         const linkToken = (0, uuid_1.v4)().replace(/-/g, '').slice(0, 16);
@@ -220,13 +276,22 @@ router.post('/create-manual', auth_1.authenticateToken, (req, res) => {
             linkToken,
             paymentUrl,
             status: 'PENDING',
+            mode,
             expiresAt,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
         database_1.db.orders.push(newOrder);
         database_1.db.save();
-        return res.status(201).json({ status: true, message: 'Order created', data: newOrder });
+        return res.status(201).json({
+            status: true,
+            message: mode === 'TEST' ? 'Test payment link created (Sandbox mode)' : 'Order created',
+            data: {
+                ...newOrder,
+                isTest: mode === 'TEST',
+                testUsage: mode === 'TEST' ? planService_1.PlanService.getTestUsage(tenant.id) : undefined
+            }
+        });
     }
     catch (e) {
         return res.status(400).json({ status: false, error: e.message });
@@ -240,6 +305,15 @@ router.post('/:id/force-verify', auth_1.authenticateToken, async (req, res) => {
     const order = database_1.db.orders.find(o => o.id === id && o.tenantId === tenantId);
     if (!order) {
         return res.status(404).json({ status: false, error: 'Order not found' });
+    }
+    if ((order.mode ?? 'LIVE') === 'LIVE' && !planService_1.PlanService.isPlanActive(tenantId)) {
+        planService_1.PlanService.logAccess(tenantId, 'SETTLEMENT_BLOCKED', req.originalUrl, 'BLOCKED', 'Active plan required for live settlement');
+        return res.status(403).json({
+            status: false,
+            error: 'PLAN_REQUIRED',
+            reason: 'ACTIVE_PLAN_REQUIRED',
+            message: 'Settling live payment orders requires an active subscription plan.'
+        });
     }
     order.status = 'TXN_SUCCESS';
     order.utr = utr || `MANUAL_${Date.now()}`;
