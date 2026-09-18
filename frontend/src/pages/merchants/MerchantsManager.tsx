@@ -416,59 +416,57 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
         </div>
       )}
 
-      {/* Hero Header Banner */}
-      <div className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 relative overflow-hidden bg-gradient-to-br from-[#13131f]/90 via-[#0b0b12]/80 to-[#181028]/90 shadow-2xl">
-        {/* Glowing Orbs */}
-        <div className="absolute -top-16 -right-16 w-80 h-80 bg-purple-600/15 blur-[120px] rounded-full pointer-events-none" />
-        <div className="absolute -bottom-16 -left-16 w-80 h-80 bg-sky-600/15 blur-[120px] rounded-full pointer-events-none" />
+      {/* Compact Top Banner & Control Bar */}
+      <div className="glass-panel px-4 py-3.5 sm:px-6 sm:py-4 rounded-2xl border border-white/10 relative overflow-hidden bg-gradient-to-br from-[#13131f]/90 via-[#0b0b12]/80 to-[#181028]/90 shadow-xl">
+        {/* Subtle Glowing Orbs */}
+        <div className="absolute -top-12 -right-12 w-64 h-64 bg-purple-600/10 blur-[100px] rounded-full pointer-events-none" />
+        <div className="absolute -bottom-12 -left-12 w-64 h-64 bg-sky-600/10 blur-[100px] rounded-full pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-2">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2.5">
-              <div className="h-10 w-10 rounded-2xl bg-gradient-primary flex items-center justify-center text-white shadow-glow">
-                <Wallet className="h-5 w-5" />
+              <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center text-white shadow-glow shrink-0">
+                <Wallet className="h-4.5 w-4.5" />
               </div>
-              <div>
-                <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                  Connected Merchant Accounts
-                </h1>
-              </div>
+              <h1 className="font-display text-xl sm:text-2xl font-extrabold text-white tracking-tight shrink-0">
+                Connected Merchant Accounts
+              </h1>
             </div>
 
-            {/* Live Metrics Chips */}
-            <div className="pt-2 flex flex-wrap items-center gap-2.5 text-xs font-mono">
-              <span className="rounded-full bg-white/5 border border-white/10 px-3 py-1 text-slate-300 flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-purple-400" />
+            {/* Live Metrics Chips inlined to save vertical space */}
+            <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+              <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-slate-300 flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
                 <strong className="text-white">{merchants.length}</strong> Total Routes
               </span>
-              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-3 py-1 text-emerald-400 flex items-center gap-1.5 font-bold">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-emerald-400 flex items-center gap-1.5 font-bold">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 <strong className="text-white">{activeCount}</strong> Live In Rotation
               </span>
-              <span className="rounded-full bg-sky-500/10 border border-sky-500/30 px-3 py-1 text-sky-400 flex items-center gap-1.5">
-                <strong className="text-white">{totalWeight}w</strong> Weighted Capacity
+              <span className="rounded-full bg-sky-500/10 border border-sky-500/30 px-2.5 py-0.5 text-sky-400 flex items-center gap-1.5">
+                <strong className="text-white">{totalWeight}w</strong> Weighted
               </span>
-              <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-3 py-1 text-amber-400 flex items-center gap-1.5">
-                <Zap className="h-3.5 w-3.5" />
-                <strong className="text-white">{intentCount}</strong> Direct Intent Enabled
+              <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-amber-400 flex items-center gap-1.5">
+                <Zap className="h-3 w-3" />
+                <strong className="text-white">{intentCount}</strong> Direct Intent
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto">
             <button
               onClick={loadMerchants}
-              className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 px-4 py-2.5 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition active:scale-95"
+              className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/80 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition active:scale-95"
             >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
               <span>Refresh</span>
             </button>
 
             <button
               onClick={() => handleStartAddProvider('PAYTM')}
-              className="flex items-center gap-2 rounded-xl bg-gradient-primary px-5 py-2.5 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition"
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition"
             >
-              <Plus className="h-4 w-4" />
+              <Plus className="h-3.5 w-3.5" />
               <span>Connect Account</span>
             </button>
           </div>
