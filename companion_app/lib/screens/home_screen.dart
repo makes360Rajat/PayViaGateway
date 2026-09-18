@@ -223,30 +223,205 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Future<void> _promptDisconnectDevice() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (dCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF111827),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.redAccent, width: 1.2),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.link_off_rounded, color: Colors.redAccent, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'Disconnect Gateway?',
+              style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Text(
+          'All live and cached order records will be permanently purged from this device, credentials wiped, and automatic SMS credit sensing stopped.',
+          style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dCtx, false),
+            child: Text('Cancel', style: GoogleFonts.dmSans(color: Colors.white60)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent.shade700,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(dCtx, true),
+            child: Text('Disconnect & Wipe', style: GoogleFonts.dmSans(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      await _handleDeviceDisconnected(reason: 'Device manually disconnected from Companion App.');
+    }
+  }
+
+  void _showDeviceDetailsModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF0B132B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: (_isDevicePaused ? Colors.amber : const Color(0xFF10B981)).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    _isDevicePaused ? Icons.pause_circle_rounded : Icons.sensors_rounded,
+                    color: _isDevicePaused ? Colors.amber : const Color(0xFF10B981),
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _pairingCode ?? 'Gateway Phone',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      Text(
+                        _isDevicePaused ? 'PAUSED (Sensing Frozen)' : 'ACTIVE (Live Gateway)',
+                        style: GoogleFonts.dmSans(
+                          color: _isDevicePaused ? Colors.amber : const Color(0xFF10B981),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Server URL', style: GoogleFonts.dmSans(color: Colors.white60, fontSize: 13)),
+                      Text(_serverUrl, style: GoogleFonts.jetBrainsMono(color: Colors.white, fontSize: 12)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Status on Web', style: GoogleFonts.dmSans(color: Colors.white60, fontSize: 13)),
+                      Text(_isDevicePaused ? 'PAUSED' : 'ACTIVE', style: GoogleFonts.spaceGrotesk(color: _isDevicePaused ? Colors.amber : const Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 13)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.redAccent.shade700,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () async {
+                  Navigator.pop(ctx);
+                  await _promptDisconnectDevice();
+                },
+                icon: const Icon(Icons.link_off_rounded, size: 18),
+                label: Text(
+                  'Disconnect & Unpair Device',
+                  style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
   Future<void> _checkPairingStatus() async {
     final token = await ApiClient.getDeviceToken();
     final code = await ApiClient.getPairingCode();
     final url = await ApiClient.getServerUrl();
     final battery = await ApiClient.getBatteryLevel();
+
     if (token != null && token.isNotEmpty) {
-      setState(() {
-        _isPaired = true;
-        _pairingCode = code;
-        _serverUrl = url;
-        _batteryLevel = battery;
-      });
+      // Live verify token against dashboard
+      final statusMap = await ApiClient.sendHeartbeat();
+      if (statusMap['isDisconnected'] == true) {
+        await _handleDeviceDisconnected(reason: 'Device not recognized or disconnected from Web Dashboard.');
+        return;
+      }
+      final isPaused = statusMap['isPaused'] == true;
+      final isOnline = statusMap['isSuccess'] == true;
+      if (mounted) {
+        setState(() {
+          _isPaired = true;
+          _isOnline = isOnline;
+          _isDevicePaused = isPaused;
+          _pairingCode = code;
+          _serverUrl = url;
+          _batteryLevel = battery;
+        });
+      }
       _startHeartbeat();
       _startOrdersPoll();
     } else {
+      _heartbeatTimer?.cancel();
       _ordersPollTimer?.cancel();
-      setState(() {
-        _isPaired = false;
-        _isDevicePaused = false;
-        _pairingCode = code;
-        _serverUrl = url;
-        _batteryLevel = battery;
-        _orders = [];
-      });
+      if (mounted) {
+        setState(() {
+          _isPaired = false;
+          _isDevicePaused = false;
+          _isOnline = false;
+          _pairingCode = code;
+          _serverUrl = url;
+          _batteryLevel = battery;
+          _orders = [];
+          _countAll = 0;
+          _countVerified = 0;
+          _countPending = 0;
+          _countRejected = 0;
+        });
+      }
     }
   }
 
@@ -690,52 +865,95 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             ),
           ),
           const SizedBox(width: 6),
-          // Prominent Pair Button on Top
-          Padding(
-            padding: const EdgeInsets.only(top: 10, bottom: 10, right: 12),
-            child: GestureDetector(
-              onTap: () async {
-                final result = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(builder: (_) => const PairingScreen()),
-                );
-                if (result == true) {
-                  _checkPairingStatus();
-                }
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF0099FF), Color(0xFF6366F1)],
+          // Top Gateway Status & Pairing Control
+          if (_isPaired) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 10, right: 4),
+              child: GestureDetector(
+                onTap: _showDeviceDetailsModal,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: (_isDevicePaused ? Colors.amber : const Color(0xFF10B981)).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: (_isDevicePaused ? Colors.amber : const Color(0xFF10B981)).withValues(alpha: 0.5),
+                    ),
                   ),
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF0099FF).withValues(alpha: 0.4),
-                      blurRadius: 8,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Colors.white),
-                    const SizedBox(width: 5),
-                    Text(
-                      _isPaired ? 'Paired' : 'Pair Device',
-                      style: GoogleFonts.spaceGrotesk(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        _isDevicePaused ? Icons.pause_circle_filled_rounded : Icons.sensors_rounded,
+                        size: 14,
+                        color: _isDevicePaused ? Colors.amber : const Color(0xFF10B981),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 5),
+                      Text(
+                        _isDevicePaused ? 'PAUSED' : (_pairingCode ?? 'PAIRED'),
+                        style: GoogleFonts.spaceGrotesk(
+                          color: _isDevicePaused ? Colors.amber : const Color(0xFF10B981),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
+            IconButton(
+              icon: const Icon(Icons.link_off_rounded, color: Colors.redAccent, size: 20),
+              tooltip: 'Disconnect Gateway',
+              onPressed: _promptDisconnectDevice,
+            ),
+          ] else ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 10, bottom: 10, right: 12),
+              child: GestureDetector(
+                onTap: () async {
+                  final result = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PairingScreen()),
+                  );
+                  if (result == true) {
+                    _checkPairingStatus();
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0099FF), Color(0xFF6366F1)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF0099FF).withValues(alpha: 0.4),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.qr_code_scanner_rounded, size: 14, color: Colors.white),
+                      const SizedBox(width: 5),
+                      Text(
+                        'Pair Device',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
          /* IconButton(
             icon: const Icon(Icons.code, color: Colors.indigoAccent),
             tooltip: 'Regex Sandbox',

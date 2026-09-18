@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
   static const String _defaultServerUrl = 'https://payvia360.com';
-  static const String _defaultDeviceToken = 'dev_tok_991823abce1283';
   static const MethodChannel _notifChannel = MethodChannel('com.payvia.gateway/notifications');
   
   static Future<int> getBatteryLevel() async {
@@ -43,7 +42,15 @@ class ApiClient {
 
   static Future<String?> getDeviceToken() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('device_token') ?? _defaultDeviceToken;
+    final token = prefs.getString('device_token');
+    if (token == null ||
+        token.isEmpty ||
+        token == 'dev_tok_991823abce1283' ||
+        token == 'PAIR-8892' ||
+        token == 'PAIR-8173') {
+      return null;
+    }
+    return token;
   }
 
   static Future<void> setDeviceToken(String token) async {
@@ -63,7 +70,14 @@ class ApiClient {
 
   static Future<String?> getPairingCode() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('pairing_code') ?? 'PAIR-8892';
+    final code = prefs.getString('pairing_code');
+    if (code == null ||
+        code.isEmpty ||
+        code == 'PAIR-8892' ||
+        code == 'PAIR-8173') {
+      return null;
+    }
+    return code;
   }
 
   static Future<void> setPairingCode(String code) async {
@@ -143,13 +157,16 @@ class ApiClient {
 
       final isDisconnected = response.statusCode == 404 || 
                              data['code'] == 'DEVICE_DISCONNECTED' || 
+                             data['error'] == 'DEVICE_DISCONNECTED' ||
+                             data['error'] == 'Device not recognized or not paired' ||
+                             data['error'] == 'Device has been disconnected or removed from dashboard' ||
                              data['isDisconnected'] == true;
       final isPaused = data['isPaused'] == true || 
                        data['status'] == 'PAUSED' || 
                        (data['data'] is Map && data['data']['status'] == 'PAUSED');
 
       return {
-        'isSuccess': response.statusCode == 200,
+        'isSuccess': response.statusCode == 200 && data['status'] == true,
         'isPaused': isPaused,
         'isDisconnected': isDisconnected,
         'deviceStatus': isPaused ? 'PAUSED' : 'ACTIVE',

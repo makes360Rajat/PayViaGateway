@@ -13,7 +13,7 @@ class _PairingScreenState extends State<PairingScreen> {
   // Domain URL is permanently locked and non-editable
   final String _productionDomain = 'https://payvia360.com';
   final TextEditingController _serverUrlController = TextEditingController(text: 'https://payvia360.com');
-  final TextEditingController _tokenController = TextEditingController(text: 'PAIR-8173');
+  final TextEditingController _tokenController = TextEditingController(text: '');
   final TextEditingController _deviceNameController = TextEditingController(text: 'Android SMS Gateway Phone');
 
   bool _isLoading = false;
@@ -24,7 +24,7 @@ class _PairingScreenState extends State<PairingScreen> {
     _serverUrlController.text = _productionDomain;
 
     ApiClient.getPairingCode().then((code) {
-      if (mounted && code != null && code.isNotEmpty) {
+      if (mounted && code != null && code.isNotEmpty && code != 'PAIR-8892' && code != 'PAIR-8173') {
         setState(() {
           _tokenController.text = code;
         });

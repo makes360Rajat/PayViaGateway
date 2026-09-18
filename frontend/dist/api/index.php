@@ -1153,9 +1153,19 @@ try {
                 exit;
             }
 
-            $stmt = $db->prepare("SELECT id, tenant_id, status, is_online FROM devices WHERE device_token = ? OR id = ? LIMIT 1");
-            $stmt->execute([$deviceToken, $deviceToken]);
+            $upperCode = strtoupper($deviceToken);
+            $stmt = $db->prepare("SELECT id, tenant_id, status, is_online FROM devices WHERE device_token = ? OR pairing_code = ? OR pairing_code = ? OR id = ? LIMIT 1");
+            $stmt->execute([$deviceToken, $upperCode, 'PAIR-' . $upperCode, $deviceToken]);
             $device = $stmt->fetch();
+
+            if (!$device) {
+                $clean = preg_replace('/[^0-9]/', '', $deviceToken);
+                if ($clean) {
+                    $stmt = $db->prepare("SELECT id, tenant_id, status, is_online FROM devices WHERE pairing_code LIKE ? ORDER BY created_at DESC LIMIT 1");
+                    $stmt->execute(['%' . $clean]);
+                    $device = $stmt->fetch();
+                }
+            }
 
             if (!$device) {
                 http_response_code(404);
