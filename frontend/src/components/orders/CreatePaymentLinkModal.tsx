@@ -35,6 +35,7 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
   const isLimitReached = !isPlanActive && testOrdersRemaining <= 0;
 
   const [amount, setAmount] = useState('');
+  const [amountError, setAmountError] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerMobile, setCustomerMobile] = useState('');
   const [remark, setRemark] = useState('');
@@ -67,6 +68,7 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
       setCreatedOrder(null);
       setQrDataUrl('');
       setAmount('');
+      setAmountError('');
       setCustomerName('');
       setCustomerMobile('');
       setRemark('');
@@ -76,10 +78,11 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!amount || parseFloat(amount) <= 0) {
-      alert('Please enter a valid amount');
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      setAmountError('Please enter a valid amount greater than ₹0');
       return;
     }
+    setAmountError('');
 
     setIsSubmitting(true);
     const res = await ApiService.createOrderManual({
@@ -130,6 +133,7 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
     setCreatedOrder(null);
     setQrDataUrl('');
     setAmount('');
+    setAmountError('');
     setCustomerName('');
     setCustomerMobile('');
     setRemark('');
@@ -198,35 +202,49 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
               </div>
             )}
 
-            {/* Link Copy Box */}
-            <div className="flex items-center justify-between gap-2 bg-slate-900 px-4 py-3 rounded-2xl border border-white/10 text-xs font-mono text-left">
-              <span className="text-purple-300 truncate">{createdOrder.paymentUrl}</span>
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                className="rounded-lg bg-purple-600 px-3 py-1.5 font-bold text-white hover:bg-purple-500 shrink-0 flex items-center gap-1 transition"
-              >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
-                <span>{copied ? 'Copied!' : 'Copy'}</span>
-              </button>
+            {/* Payment URL Box */}
+            <div className="rounded-2xl bg-black/40 border border-white/10 p-3.5 flex items-center justify-between gap-3 text-left">
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-mono uppercase text-slate-500 block">Customer Checkout Link</span>
+                <p className="text-xs font-mono text-purple-300 truncate">{createdOrder.paymentUrl}</p>
+              </div>
+              
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={handleCopyLink}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                    copied 
+                      ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300' 
+                      : 'bg-white/10 hover:bg-white/20 text-white'
+                  }`}
+                >
+                  {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                  <span>{copied ? 'Copied!' : 'Copy'}</span>
+                </button>
+
+                <a
+                  href={createdOrder.paymentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-xl p-1.5 bg-white/10 hover:bg-white/20 text-white transition"
+                  title="Open Checkout Page"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </div>
             </div>
 
-            {/* Action Buttons */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-              <a
-                href={createdOrder.paymentUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-primary py-2.5 text-xs font-bold text-white shadow-glow hover:brightness-110 transition"
-              >
-                <span>Open Checkout Page</span>
-                <ExternalLink className="h-3.5 w-3.5" />
-              </a>
-
+            {/* Done Actions */}
+            <div className="flex items-center justify-center gap-3 pt-2">
               <button
-                type="button"
+                onClick={onClose}
+                className="rounded-xl px-5 py-2 text-xs font-bold bg-white/10 hover:bg-white/15 text-white transition"
+              >
+                Close
+              </button>
+              <button
                 onClick={handleResetForAnother}
-                className="rounded-xl bg-white/10 hover:bg-white/15 py-2.5 text-xs font-semibold text-slate-200 transition"
+                className="rounded-xl bg-gradient-primary px-5 py-2 text-xs font-bold text-white shadow-glow hover:brightness-110 transition"
               >
                 + Create Another Link
               </button>
@@ -234,7 +252,7 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
           </div>
         ) : (
           /* Input Form */
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
             
             {/* Free Test Mode Ribbon */}
             {!isPlanActive && (
@@ -270,8 +288,11 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
                     <button
                       key={val}
                       type="button"
-                      onClick={() => setAmount(val)}
-                      className="rounded-lg bg-white/5 hover:bg-white/10 px-2 py-0.5 text-[10px] font-mono text-purple-300 border border-white/5"
+                      onClick={() => {
+                        setAmount(val);
+                        if (amountError) setAmountError('');
+                      }}
+                      className="rounded-lg bg-white/5 hover:bg-white/10 px-2 py-0.5 text-[10px] font-mono text-purple-300 border border-white/5 transition"
                     >
                       ₹{val}
                     </button>
@@ -282,15 +303,28 @@ export const CreatePaymentLinkModal: React.FC<CreatePaymentLinkModalProps> = ({
               <div className="relative">
                 <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold text-sm">₹</span>
                 <input
-                  type="number"
-                  step="0.01"
-                  required
+                  type="text"
+                  inputMode="decimal"
                   placeholder="499.00"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-full rounded-2xl bg-slate-900/90 border border-white/10 pl-8 pr-4 py-2.5 text-base font-bold font-mono text-white focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500/30"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    // Allow only digits and at most one decimal point
+                    if (val === '' || /^\d*\.?\d{0,2}$/.test(val)) {
+                      setAmount(val);
+                      if (amountError) setAmountError('');
+                    }
+                  }}
+                  className={`w-full rounded-2xl bg-slate-900/90 border ${amountError ? 'border-rose-500 ring-1 ring-rose-500/30' : 'border-white/10'} pl-8 pr-4 py-2.5 text-base font-bold font-mono text-white focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500/30`}
                 />
               </div>
+
+              {amountError && (
+                <p className="mt-1.5 text-xs text-rose-400 font-medium flex items-center gap-1.5 animate-fadeIn">
+                  <span className="h-1.5 w-1.5 rounded-full bg-rose-400" />
+                  <span>{amountError}</span>
+                </p>
+              )}
             </div>
 
             {/* Customer Details */}
