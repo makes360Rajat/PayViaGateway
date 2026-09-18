@@ -494,7 +494,7 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
               <p className="text-xs text-slate-300 max-w-3xl leading-relaxed">
                 Your gateway account is currently running in Free Test Mode (allowance: 
                 <strong className="text-amber-300 font-mono ml-1 mr-1">{entitlements?.testOrdersUsed ?? planUsage?.used ?? 0} / {entitlements?.testOrdersMax ?? planUsage?.limit ?? 5} test orders used</strong>).
-                Connecting live merchant accounts (Paytm, BharatPe, FamPay, Custom UPI, etc.) to receive real customer payments requires upgrading to an active gateway subscription plan.
+                Connecting live merchant accounts to receive real customer payments requires upgrading to an active gateway subscription plan.
               </p>
             </div>
           </div>
@@ -650,7 +650,7 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
             <p className="text-xs text-slate-400 max-w-md mx-auto">
               {searchQuery || filterProvider !== 'ALL'
                 ? 'No merchant accounts match your current filter or search criteria.'
-                : 'Connect your first Paytm, BharatPe, FamPay, Freecharge, or Custom UPI account to start processing direct settlements.'}
+                : 'Connect your first merchant account to start processing direct settlements.'}
             </p>
             <button
               onClick={() => handleStartAddProvider('PAYTM')}
@@ -1227,7 +1227,7 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
                 Unlock Live Payment Accounts
               </h3>
               <p className="text-xs text-slate-300 leading-relaxed max-w-sm mx-auto">
-                Connecting Paytm, BharatPe, FamPay, Freecharge, or Custom UPI accounts to collect real customer money requires an active subscription.
+                Connecting merchant accounts to collect real customer money requires an active subscription.
               </p>
             </div>
 
