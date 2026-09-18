@@ -3,6 +3,7 @@ import { db } from '../db/database';
 import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { DetectionEngine } from '../services/detectionEngine';
 import { WebhookService } from '../services/webhookService';
+import { PlanService } from '../services/planService';
 import { PairedDevice } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -407,6 +408,9 @@ router.post('/orders/:id/settle', async (req: Request, res: Response) => {
     deviceName: device.deviceName 
   };
   db.save();
+
+  // Check and activate plan if this was a subscription order
+  PlanService.activatePurchasedPlanIfSettled(order);
 
   // Dispatch Webhook to merchant callback
   try {

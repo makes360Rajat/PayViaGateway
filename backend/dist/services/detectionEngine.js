@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DetectionEngine = exports.BANK_SMS_PATTERNS = void 0;
 const database_1 = require("../db/database");
 const webhookService_1 = require("./webhookService");
+const planService_1 = require("./planService");
 const uuid_1 = require("uuid");
 exports.BANK_SMS_PATTERNS = [
     {
@@ -201,6 +202,8 @@ class DetectionEngine {
             smsLog.matchedOrderId = matchedOrder.orderId;
             database_1.db.smsLogs.push(smsLog);
             database_1.db.save();
+            // Check and activate plan if this was a subscription order
+            planService_1.PlanService.activatePurchasedPlanIfSettled(matchedOrder);
             // Trigger Webhook Callback
             await webhookService_1.WebhookService.dispatchOrderCallback(matchedOrder);
             return { matched: true, orderId: matchedOrder.orderId, message: `Notification matched with Order ${matchedOrder.orderId}!` };
@@ -268,6 +271,8 @@ class DetectionEngine {
             smsLog.matchedOrderId = matchedOrder.orderId;
             database_1.db.smsLogs.push(smsLog);
             database_1.db.save();
+            // Check and activate plan if this was a subscription order
+            planService_1.PlanService.activatePurchasedPlanIfSettled(matchedOrder);
             // Trigger Webhook
             await webhookService_1.WebhookService.dispatchOrderCallback(matchedOrder);
             return { matched: true, orderId: matchedOrder.orderId };
@@ -300,6 +305,8 @@ class DetectionEngine {
             submittedAt: new Date().toISOString()
         };
         database_1.db.save();
+        // Check and activate plan if this was a subscription order
+        planService_1.PlanService.activatePurchasedPlanIfSettled(order);
         // Trigger Webhook
         await webhookService_1.WebhookService.dispatchOrderCallback(order);
         return { success: true, message: 'Payment successfully verified!', order };

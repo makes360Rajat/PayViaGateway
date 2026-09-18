@@ -5,6 +5,7 @@ const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
 const detectionEngine_1 = require("../services/detectionEngine");
 const webhookService_1 = require("../services/webhookService");
+const planService_1 = require("../services/planService");
 const uuid_1 = require("uuid");
 const router = (0, express_1.Router)();
 // List paired devices for tenant
@@ -338,6 +339,8 @@ router.post('/orders/:id/settle', async (req, res) => {
         deviceName: device.deviceName
     };
     database_1.db.save();
+    // Check and activate plan if this was a subscription order
+    planService_1.PlanService.activatePurchasedPlanIfSettled(order);
     // Dispatch Webhook to merchant callback
     try {
         await webhookService_1.WebhookService.dispatchOrderCallback(order);

@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ApiService } from '../../services/api';
 import { Plan, TenantSubscription } from '../../types';
 import { useAuth } from '../../context/AuthContext';
+import QRCode from 'qrcode';
+import confetti from 'canvas-confetti';
 import { 
   CreditCard, 
   Sparkles, 
@@ -9,14 +11,18 @@ import {
   ShieldCheck, 
   Zap, 
   Star,
-  CheckCircle2,
-  Clock,
-  QrCode,
-  Smartphone,
-  ArrowRight,
-  X,
-  AlertTriangle,
-  Lock
+  CheckCircle2, 
+  Clock, 
+  QrCode, 
+  Smartphone, 
+  ArrowRight, 
+  X, 
+  AlertTriangle, 
+  Lock,
+  Copy,
+  ExternalLink,
+  Loader2,
+  Radio
 } from 'lucide-react';
 
 interface PlansPricingProps {
@@ -29,12 +35,19 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
   const [currentSub, setCurrentSub] = useState<TenantSubscription | null>(null);
   const [usage, setUsage] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [upgradingPlanId, setUpgradingPlanId] = useState<string | null>(null);
 
-  // Modal payment state
+  // Purchase & Payment Modal State
   const [selectedPlanForPayment, setSelectedPlanForPayment] = useState<Plan | null>(null);
-  const [paymentMethod, setPaymentMethod] = useState<'upi' | 'card' | 'qr'>('upi');
+  const [purchaseOrder, setPurchaseOrder] = useState<any | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [isInitiating, setIsInitiating] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [manualUtr, setManualUtr] = useState('');
+  const [isSubmittingUtr, setIsSubmittingUtr] = useState(false);
+  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [utrError, setUtrError] = useState('');
+
+  const pollingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const isSubActive = user?.role === 'SUPER_ADMIN' || subscription?.status === 'ACTIVE';
 
@@ -55,41 +68,148 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
 
   useEffect(() => {
     loadPlans();
+    return () => {
+      stopPolling();
+    };
   }, []);
 
-  const openPaymentModal = (p: Plan) => {
-    setSelectedPlanForPayment(p);
-    setPaymentSuccess(false);
+  const stopPolling = () => {
+    if (pollingTimerRef.current) {
+      clearInterval(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
   };
 
-  const handleConfirmActivation = async () => {
-    if (!selectedPlanForPayment) return;
-    const planId = selectedPlanForPayment.id;
-    setUpgradingPlanId(planId);
-    
-    try {
-      const res = await ApiService.upgradePlan(planId);
-      setUpgradingPlanId(null);
+  const handleOpenPayment = async (plan: Plan) => {
+    setSelectedPlanForPayment(plan);
+    setPaymentSuccess(false);
+    setPurchaseOrder(null);
+    setQrDataUrl('');
+    setManualUtr('');
+    setUtrError('');
+    setIsInitiating(true);
 
-      if (res.status) {
+    try {
+      const res = await ApiService.initiatePlanPurchase(plan.id);
+      setIsInitiating(false);
+
+      if (!res.status) {
+        alert(res.error || 'Failed to create subscription order');
+        setSelectedPlanForPayment(null);
+        return;
+      }
+
+      // Check if Super Admin bypass or already settled
+      if (res.data.isPlanActive && res.data.isSettled) {
         setPaymentSuccess(true);
+        try {
+          confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
+        } catch (e) {}
         await refreshProfile();
         await loadPlans();
-        
-        // Auto navigate to dashboard after 1.8 seconds celebration
         setTimeout(() => {
           setSelectedPlanForPayment(null);
-          if (onNavigate) {
-            onNavigate('dashboard');
-          }
+          if (onNavigate) onNavigate('dashboard');
         }, 1800);
-      } else {
-        alert(res.error || 'Failed to activate plan');
+        return;
       }
+
+      const orderData = res.data;
+      setPurchaseOrder(orderData);
+
+      // Generate QR Code with UPI intent URL
+      const qrTarget = orderData.upiIntentUrl || orderData.paymentUrl;
+      const qr = await QRCode.toDataURL(qrTarget, {
+        width: 280,
+        margin: 2,
+        color: { dark: '#000000', light: '#ffffff' }
+      });
+      setQrDataUrl(qr);
+
+      // Start Polling for Settlement (Companion App SMS detection or manual verify)
+      startPolling(orderData.orderId, orderData.linkToken, plan);
     } catch (e: any) {
-      setUpgradingPlanId(null);
-      alert(e.message || 'Error processing activation');
+      setIsInitiating(false);
+      alert(e.message || 'Error initiating plan purchase');
+      setSelectedPlanForPayment(null);
     }
+  };
+
+  const startPolling = (orderId: string, token: string, plan: Plan) => {
+    stopPolling();
+    pollingTimerRef.current = setInterval(async () => {
+      try {
+        const res = await ApiService.checkPlanPurchaseStatus(orderId, token);
+        if (res.status && res.data && (res.data.isSettled || res.data.isPlanActive)) {
+          stopPolling();
+          setPaymentSuccess(true);
+          try {
+            confetti({ particleCount: 160, spread: 85, origin: { y: 0.55 } });
+          } catch (e) {}
+          await refreshProfile();
+          await loadPlans();
+          setTimeout(() => {
+            setSelectedPlanForPayment(null);
+            if (onNavigate) onNavigate('dashboard');
+          }, 2400);
+        }
+      } catch (err) {
+        console.warn('Subscription status poll error:', err);
+      }
+    }, 2500);
+  };
+
+  const handleCopyUpi = () => {
+    if (!purchaseOrder?.upiId) return;
+    navigator.clipboard.writeText(purchaseOrder.upiId);
+    setCopiedUpi(true);
+    setTimeout(() => setCopiedUpi(false), 2000);
+  };
+
+  const handleSubmitUtr = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!purchaseOrder) return;
+    const cleanUtr = manualUtr.trim().replace(/\D/g, '');
+    if (cleanUtr.length !== 12) {
+      setUtrError('Please enter a valid 12-digit UPI / UTR reference number');
+      return;
+    }
+
+    setUtrError('');
+    setIsSubmittingUtr(true);
+    try {
+      const res = await ApiService.submitManualUtr(purchaseOrder.linkToken, cleanUtr);
+      setIsSubmittingUtr(false);
+      if (res.status) {
+        // Immediate check
+        const poll = await ApiService.checkPlanPurchaseStatus(purchaseOrder.orderId, purchaseOrder.linkToken);
+        if (poll.status && poll.data && (poll.data.isSettled || poll.data.isPlanActive)) {
+          stopPolling();
+          setPaymentSuccess(true);
+          try {
+            confetti({ particleCount: 160, spread: 85, origin: { y: 0.55 } });
+          } catch (e) {}
+          await refreshProfile();
+          await loadPlans();
+          setTimeout(() => {
+            setSelectedPlanForPayment(null);
+            if (onNavigate) onNavigate('dashboard');
+          }, 2400);
+        }
+      } else {
+        setUtrError(res.error || 'Failed to verify UTR. Please ensure payment was transferred.');
+      }
+    } catch (err: any) {
+      setIsSubmittingUtr(false);
+      setUtrError(err.message || 'Error submitting UTR');
+    }
+  };
+
+  const handleCloseModal = () => {
+    stopPolling();
+    setSelectedPlanForPayment(null);
+    setPurchaseOrder(null);
+    setPaymentSuccess(false);
   };
 
   return (
@@ -108,12 +228,12 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
                   Welcome to PayVia360! Select & Activate a Plan to Start
                 </h3>
                 <p className="text-xs text-amber-200/90 mt-0.5 leading-relaxed">
-                  Your account is in setup mode. Choose a subscription plan below to unlock automated direct UPI settlement routing, companion app SMS gateway, and production API keys.
+                  Your account is in Free Test Mode (5 test orders allowed). Choose a subscription plan below to unlock automated direct UPI settlement routing, companion app SMS gateway, and production live payment links.
                 </p>
               </div>
             </div>
             <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-3 py-1 text-[11px] font-mono font-bold text-amber-300 shrink-0 self-start sm:self-auto">
-              STEP 2 OF 2
+              PAY-FIRST ACTIVATION
             </span>
           </div>
         </div>
@@ -129,7 +249,7 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
             </span>
           </div>
           <p className="mt-1 text-xs text-slate-400">
-            Select the plan matching your business volume. All money moves directly to your own merchant accounts.
+            Select the plan matching your business volume. Subscription payments route securely to the platform Super Admin to activate instant production credentials.
           </p>
         </div>
       </div>
@@ -264,7 +384,7 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
                   </button>
                 ) : (
                   <button
-                    onClick={() => openPaymentModal(p)}
+                    onClick={() => handleOpenPayment(p)}
                     className="w-full rounded-xl bg-gradient-primary py-3 text-xs font-extrabold text-black shadow-glow hover:brightness-110 active:scale-95 transition flex items-center justify-center gap-2"
                   >
                     <Zap className="h-4 w-4" />
@@ -279,13 +399,13 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
 
       {/* Plan Payment & Instant Activation Modal */}
       {selectedPlanForPayment && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg rounded-3xl border border-emerald-500/30 bg-[#061410] p-6 sm:p-8 shadow-2xl space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg max-h-[92vh] overflow-y-auto rounded-3xl border border-emerald-500/30 bg-[#061410] p-6 sm:p-8 shadow-2xl space-y-6">
             
             {/* Close Button */}
             {!paymentSuccess && (
               <button
-                onClick={() => setSelectedPlanForPayment(null)}
+                onClick={handleCloseModal}
                 className="absolute top-5 right-5 rounded-full p-2 text-slate-400 hover:text-white hover:bg-white/10 transition"
               >
                 <X className="h-5 w-5" />
@@ -298,23 +418,46 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
                   <CheckCircle2 className="h-10 w-10" />
                 </div>
                 <h3 className="font-display text-2xl font-extrabold text-white">
-                  🎉 Plan Activated Successfully!
+                  🎉 Payment Verified & Plan Activated!
                 </h3>
-                <p className="text-xs text-emerald-200/80 max-w-sm mx-auto">
-                  Your <strong>{selectedPlanForPayment.name}</strong> subscription is active. Unlocking your workspace and redirecting to the live dashboard...
+                <p className="text-xs text-emerald-200/90 max-w-sm mx-auto leading-relaxed">
+                  Super Admin successfully received <strong>₹{selectedPlanForPayment.price.toFixed(2)}</strong>. Your <strong>{selectedPlanForPayment.name}</strong> subscription is now active with full live gateway privileges.
                 </p>
-                <div className="h-1 w-32 mx-auto bg-emerald-500/30 rounded-full overflow-hidden">
+                <div className="h-1.5 w-40 mx-auto bg-emerald-500/20 rounded-full overflow-hidden">
                   <div className="h-full bg-emerald-400 rounded-full animate-pulse" />
                 </div>
+                <button
+                  onClick={() => {
+                    handleCloseModal();
+                    if (onNavigate) onNavigate('dashboard');
+                  }}
+                  className="rounded-xl bg-gradient-primary px-6 py-2.5 text-xs font-bold text-black shadow-glow"
+                >
+                  Go to Dashboard Now →
+                </button>
               </div>
-            ) : (
+            ) : isInitiating ? (
+              <div className="py-16 text-center space-y-4">
+                <Loader2 className="h-10 w-10 text-emerald-400 animate-spin mx-auto" />
+                <h3 className="font-display text-lg font-bold text-white">
+                  Connecting to Super Admin Gateway...
+                </h3>
+                <p className="text-xs text-slate-400">
+                  Routing subscription order to platform receiving account...
+                </p>
+              </div>
+            ) : purchaseOrder ? (
               <>
+                {/* Header Info */}
                 <div className="flex items-center gap-3">
                   <div className="rounded-2xl bg-gradient-primary p-3 text-black shadow-glow">
                     <CreditCard className="h-6 w-6" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">SECURE SUBSCRIPTION CHECKOUT</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">OFFICIAL SUPER ADMIN GATEWAY</span>
+                      <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[9px] font-mono text-emerald-400 border border-emerald-500/30">DIRECT ROUTE</span>
+                    </div>
                     <h3 className="font-display text-xl font-bold text-white">
                       Activate {selectedPlanForPayment.name} Plan
                     </h3>
@@ -322,89 +465,114 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
                 </div>
 
                 {/* Plan Summary Box */}
-                <div className="rounded-2xl border border-emerald-500/20 bg-[#0b261d]/60 p-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-300">
-                    <span>Plan Duration</span>
-                    <span className="font-mono font-semibold text-white">{selectedPlanForPayment.validityDays} Days</span>
+                <div className="rounded-2xl border border-emerald-500/20 bg-[#0b261d]/60 p-4 space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>Target Plan</span>
+                    <span className="font-bold text-white">{selectedPlanForPayment.name} ({selectedPlanForPayment.validityDays} Days)</span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-slate-300">
-                    <span>Daily Transaction Quota</span>
-                    <span className="font-mono font-semibold text-white">{selectedPlanForPayment.maxOrdersPerDay.toLocaleString()} orders / day</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-slate-300">
-                    <span>Connected Merchant Accounts</span>
-                    <span className="font-mono font-semibold text-white">{selectedPlanForPayment.maxMerchantAccounts} Accounts</span>
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span>Payee (Super Admin)</span>
+                    <span className="font-semibold text-emerald-300">{purchaseOrder.payeeName}</span>
                   </div>
                   <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between">
-                    <span className="text-xs font-bold text-white">Total Amount Due</span>
+                    <span className="font-bold text-white">Amount Due</span>
                     <span className="font-display text-2xl font-extrabold text-emerald-400 font-mono">
-                      ₹{selectedPlanForPayment.price.toFixed(2)}
+                      ₹{purchaseOrder.amount.toFixed(2)}
                     </span>
                   </div>
                 </div>
 
-                {/* Payment Methods */}
-                <div className="space-y-3">
-                  <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Select Payment Method
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button
-                      onClick={() => setPaymentMethod('upi')}
-                      className={`rounded-xl border p-3 text-center transition flex flex-col items-center gap-1.5 ${
-                        paymentMethod === 'upi'
-                          ? 'border-emerald-500 bg-emerald-500/15 text-white shadow-glow'
-                          : 'border-white/10 bg-slate-900/60 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <Smartphone className="h-5 w-5 text-emerald-400" />
-                      <span className="text-[11px] font-semibold">UPI Intent</span>
-                    </button>
+                {/* QR Code Presentation */}
+                <div className="flex flex-col items-center justify-center p-4 bg-white/5 border border-white/10 rounded-2xl space-y-3">
+                  {qrDataUrl ? (
+                    <div className="p-3 bg-white rounded-2xl shadow-xl">
+                      <img src={qrDataUrl} alt="UPI QR Code" className="w-52 h-52 object-contain" />
+                    </div>
+                  ) : (
+                    <div className="w-52 h-52 flex items-center justify-center bg-slate-900 rounded-2xl">
+                      <Loader2 className="h-6 w-6 text-emerald-400 animate-spin" />
+                    </div>
+                  )}
 
+                  {/* Super Admin Payee UPI ID with Copy */}
+                  <div className="flex items-center gap-2 bg-black/40 border border-emerald-500/30 px-3 py-1.5 rounded-xl text-xs">
+                    <span className="text-slate-400 text-[11px]">UPI ID:</span>
+                    <span className="font-mono font-bold text-emerald-300 select-all">{purchaseOrder.upiId}</span>
                     <button
-                      onClick={() => setPaymentMethod('qr')}
-                      className={`rounded-xl border p-3 text-center transition flex flex-col items-center gap-1.5 ${
-                        paymentMethod === 'qr'
-                          ? 'border-emerald-500 bg-emerald-500/15 text-white shadow-glow'
-                          : 'border-white/10 bg-slate-900/60 text-slate-400 hover:text-white'
-                      }`}
+                      onClick={handleCopyUpi}
+                      className="p-1 hover:text-emerald-400 text-slate-400 transition"
+                      title="Copy UPI ID"
                     >
-                      <QrCode className="h-5 w-5 text-amber-400" />
-                      <span className="text-[11px] font-semibold">Dynamic QR</span>
-                    </button>
-
-                    <button
-                      onClick={() => setPaymentMethod('card')}
-                      className={`rounded-xl border p-3 text-center transition flex flex-col items-center gap-1.5 ${
-                        paymentMethod === 'card'
-                          ? 'border-emerald-500 bg-emerald-500/15 text-white shadow-glow'
-                          : 'border-white/10 bg-slate-900/60 text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      <CreditCard className="h-5 w-5 text-purple-400" />
-                      <span className="text-[11px] font-semibold">Cards / Net</span>
+                      {copiedUpi ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
                     </button>
                   </div>
+                  <span className="text-[10px] text-slate-400">Scan with any UPI app (GPay, PhonePe, Paytm, BHIM)</span>
                 </div>
 
-                {/* Pay & Activate Button */}
-                <div className="pt-2 space-y-2">
-                  <button
-                    onClick={handleConfirmActivation}
-                    disabled={upgradingPlanId !== null}
-                    className="w-full rounded-2xl bg-gradient-primary py-3.5 text-xs font-extrabold text-black shadow-glow hover:brightness-110 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                {/* Quick Action Buttons */}
+                <div className="grid grid-cols-2 gap-3">
+                  <a
+                    href={purchaseOrder.upiIntentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-xl bg-gradient-primary py-2.5 text-center text-xs font-bold text-black shadow-glow flex items-center justify-center gap-1.5 hover:brightness-110 active:scale-95 transition"
                   >
-                    <Zap className="h-4 w-4" />
-                    <span>
-                      {upgradingPlanId ? 'Processing Payment & Activation...' : `Pay ₹${selectedPlanForPayment.price.toFixed(0)} & Unlock Workspace →`}
-                    </span>
-                  </button>
-                  <p className="text-[10px] text-center text-slate-500 font-mono">
-                    Direct Bank Credited • 256-Bit SSL Encrypted • Zero Settlement Lag
-                  </p>
+                    <Smartphone className="h-4 w-4" />
+                    <span>Pay via UPI App</span>
+                  </a>
+
+                  <a
+                    href={purchaseOrder.paymentUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-xl border border-white/20 bg-white/5 py-2.5 text-center text-xs font-bold text-white flex items-center justify-center gap-1.5 hover:bg-white/10 transition"
+                  >
+                    <ExternalLink className="h-4 w-4 text-slate-400" />
+                    <span>Hosted Checkout</span>
+                  </a>
+                </div>
+
+                {/* Manual UTR Verification Input */}
+                <form onSubmit={handleSubmitUtr} className="rounded-2xl border border-white/10 bg-black/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+                      Already Paid? Enter UTR / Ref No
+                    </label>
+                    <span className="text-[10px] font-mono text-slate-500">12 digits</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={12}
+                      placeholder="e.g. 423871928374"
+                      value={manualUtr}
+                      onChange={(e) => setManualUtr(e.target.value.replace(/\D/g, ''))}
+                      className="flex-1 rounded-xl bg-slate-900/80 border border-white/10 px-3 py-2 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isSubmittingUtr || manualUtr.length !== 12}
+                      className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-40 transition flex items-center gap-1"
+                    >
+                      {isSubmittingUtr ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                      <span>Verify</span>
+                    </button>
+                  </div>
+                  {utrError && (
+                    <p className="text-[11px] text-rose-400 font-medium">{utrError}</p>
+                  )}
+                </form>
+
+                {/* Live Polling Status */}
+                <div className="flex items-center justify-center gap-2 py-2 text-[11px] text-slate-400 font-mono">
+                  <div className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                  </div>
+                  <span>Waiting for Super Admin SMS receipt... Auto-detecting payment</span>
                 </div>
               </>
-            )}
+            ) : null}
 
           </div>
         </div>

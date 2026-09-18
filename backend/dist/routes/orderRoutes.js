@@ -321,6 +321,8 @@ router.post('/:id/force-verify', auth_1.authenticateToken, async (req, res) => {
     order.updatedAt = new Date().toISOString();
     order.rawVerificationData = { matchedBy: 'DASHBOARD_FORCE_VERIFY', verifiedBy: req.tenant.email };
     database_1.db.save();
+    // Check and activate plan if this was a subscription order
+    planService_1.PlanService.activatePurchasedPlanIfSettled(order);
     // Dispatch Webhook to merchant callback
     await webhookService_1.WebhookService.dispatchOrderCallback(order);
     return res.json({ status: true, message: 'Order marked as SUCCESS', data: order });

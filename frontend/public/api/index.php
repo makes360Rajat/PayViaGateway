@@ -335,6 +335,186 @@ class PlanService {
         $upd->execute([$now, $tenantId]);
         return true;
     }
+
+    public static function getSuperAdmin($db) {
+        $stmt = $db->prepare("SELECT * FROM tenants WHERE role = 'SUPER_ADMIN' AND is_active = 1 ORDER BY created_at ASC LIMIT 1");
+        $stmt->execute();
+        $admin = $stmt->fetch();
+        if (!$admin) {
+            $stmt = $db->prepare("SELECT * FROM tenants WHERE email = 'admin@payvia.vip' LIMIT 1");
+            $stmt->execute();
+            $admin = $stmt->fetch();
+        }
+        return $admin ?: null;
+    }
+
+    public static function getSuperAdminMerchantAccount($db) {
+        $admin = self::getSuperAdmin($db);
+        if (!$admin) return null;
+
+        // Query active merchant accounts belonging to the Super Admin
+        $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY weight DESC, created_at ASC");
+        $stmt->execute([$admin['id']]);
+        $merchants = $stmt->fetchAll();
+
+        if (!empty($merchants)) {
+            return $merchants[0];
+        }
+
+        // Fallback: Check if super admin has ANY merchant
+        $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? ORDER BY created_at ASC LIMIT 1");
+        $stmt->execute([$admin['id']]);
+        $any = $stmt->fetch();
+        if ($any) return $any;
+
+        // Synthetic fallback if super admin hasn't added one yet
+        return [
+            'id' => 'mch_admin_central',
+            'tenant_id' => $admin['id'],
+            'provider' => 'CUSTOM_UPI',
+            'label' => 'PayVia Admin Central Desk',
+            'upi_id' => 'admin@payvia',
+            'display_name' => 'PayVia Official Platform',
+            'status' => 'ACTIVE',
+            'weight' => 10
+        ];
+    }
+
+    public static function createSubscriptionOrder($db, $buyerTenant, $targetPlan) {
+        $admin = self::getSuperAdmin($db);
+        if (!$admin) {
+            throw new Exception("Super Admin platform configuration not found");
+        }
+        $mch = self::getSuperAdminMerchantAccount($db);
+        if (!$mch) {
+            throw new Exception("No active Super Admin merchant account available to receive plan payment");
+        }
+
+        $orderId = 'ord_sub_' . substr(bin2hex(random_bytes(6)), 0, 8);
+        $linkToken = bin2hex(random_bytes(16));
+        $amount = (float)$targetPlan['price'];
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $expires = gmdate('Y-m-d\TH:i:s\Z', time() + 3600);
+        $customerName = $buyerTenant['business_name'] ?: $buyerTenant['name'];
+        $customerMobile = $buyerTenant['phone'] ?: '';
+        $remark = "PLAN_PURCHASE:{$targetPlan['id']}:{$buyerTenant['id']}";
+
+        // Created under Super Admin tenant so Super Admin's companion app detects bank SMS and settles it!
+        $stmt = $db->prepare("INSERT INTO orders (
+            id, tenant_id, order_id, amount, currency, status, 
+            customer_name, customer_mobile, remark1, merchant_account_id, 
+            link_token, expires_at, mode, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, 'INR', 'PENDING', ?, ?, ?, ?, ?, ?, 'LIVE', ?, ?)");
+        
+        $stmt->execute([
+            $orderId,
+            $admin['id'],
+            $orderId,
+            $amount,
+            $customerName,
+            $customerMobile,
+            $remark,
+            $mch['id'],
+            $linkToken,
+            $expires,
+            $now,
+            $now
+        ]);
+
+        $host = $_SERVER['HTTP_HOST'] ?? 'payvia360.com';
+        $proto = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'https';
+        $paymentUrl = "$proto://$host/checkout/$linkToken";
+
+        $upiId = $mch['upi_id'] ?: 'admin@payvia';
+        $payeeName = $mch['display_name'] ?: 'PayVia Official Platform';
+        $upiIntent = "upi://pay?pa=" . urlencode($upiId) . "&pn=" . urlencode($payeeName) . "&am=" . number_format($amount, 2, '.', '') . "&cu=INR&tn=" . urlencode($orderId);
+
+        self::logAccess($buyerTenant['id'], 'PLAN_PURCHASE_ORDER_CREATED', '/api/plans/purchase', 'SUCCESS', "Order {$orderId} for plan {$targetPlan['name']} created", $db);
+
+        return [
+            'orderId' => $orderId,
+            'linkToken' => $linkToken,
+            'amount' => $amount,
+            'plan' => $targetPlan,
+            'merchant' => $mch,
+            'paymentUrl' => $paymentUrl,
+            'upiIntentUrl' => $upiIntent,
+            'upiId' => $upiId,
+            'payeeName' => $payeeName,
+            'expiresAt' => $expires
+        ];
+    }
+
+    public static function activatePurchasedPlanIfSettled($db, $orderData) {
+        if (is_string($orderData)) {
+            $stmt = $db->prepare("SELECT * FROM orders WHERE id = ? OR order_id = ? LIMIT 1");
+            $stmt->execute([$orderData, $orderData]);
+            $orderData = $stmt->fetch();
+        }
+        if (!$orderData) return false;
+
+        $remark = $orderData['remark1'] ?? '';
+        if (strpos($remark, 'PLAN_PURCHASE:') !== 0) {
+            return false;
+        }
+
+        if (($orderData['status'] ?? '') !== 'TXN_SUCCESS') {
+            return false;
+        }
+
+        $parts = explode(':', $remark);
+        if (count($parts) < 3) return false;
+
+        $planId = $parts[1];
+        $buyerTenantId = $parts[2];
+
+        $stmt = $db->prepare("SELECT * FROM tenants WHERE id = ?");
+        $stmt->execute([$buyerTenantId]);
+        $buyer = $stmt->fetch();
+        if (!$buyer) return false;
+
+        $stmt = $db->prepare("SELECT * FROM plans WHERE id = ?");
+        $stmt->execute([$planId]);
+        $targetPlan = $stmt->fetch();
+        if (!$targetPlan) return false;
+
+        $planPrice = (float)$targetPlan['price'];
+        $paidAmount = (float)$orderData['amount'];
+
+        if ($paidAmount < ($planPrice - 0.5)) {
+            self::logAccess($buyerTenantId, 'PLAN_ACTIVATION_AMOUNT_MISMATCH', 'settle', 'FAILED', "Paid {$paidAmount} less than plan price {$planPrice}", $db);
+            return false;
+        }
+
+        $now = gmdate('Y-m-d\TH:i:s\Z');
+        $validityDays = (int)($targetPlan['validity_days'] ?: 30);
+        $expires = gmdate('Y-m-d\TH:i:s\Z', strtotime("+$validityDays days"));
+
+        // 1. Update Tenant plan
+        $stmt = $db->prepare("UPDATE tenants SET plan_id = ?, updated_at = ? WHERE id = ?");
+        $stmt->execute([$targetPlan['id'], $now, $buyerTenantId]);
+
+        // 2. Update / Insert Subscription
+        $stmt = $db->prepare("SELECT id FROM subscriptions WHERE tenant_id = ?");
+        $stmt->execute([$buyerTenantId]);
+        $existingSub = $stmt->fetch();
+
+        if ($existingSub) {
+            $stmt = $db->prepare("UPDATE subscriptions SET plan_id = ?, status = 'ACTIVE', starts_at = ?, expires_at = ?, orders_today = 0, last_reset_date = ? WHERE tenant_id = ?");
+            $stmt->execute([$targetPlan['id'], $now, $expires, date('Y-m-d'), $buyerTenantId]);
+        } else {
+            $subId = 'sub_' . substr(bin2hex(random_bytes(6)), 0, 8);
+            $stmt = $db->prepare("INSERT INTO subscriptions (id, tenant_id, plan_id, status, starts_at, expires_at, orders_today, last_reset_date) VALUES (?, ?, ?, 'ACTIVE', ?, ?, 0, ?)");
+            $stmt->execute([$subId, $buyerTenantId, $targetPlan['id'], $now, $expires, date('Y-m-d')]);
+        }
+
+        // 3. Reset plan_usage test count so they start fresh in live mode
+        $stmt = $db->prepare("UPDATE plan_usage SET test_orders_used = 0, updated_at = ? WHERE tenant_id = ?");
+        $stmt->execute([$now, $buyerTenantId]);
+
+        self::logAccess($buyerTenantId, 'PLAN_PURCHASE_ACTIVATED', 'settle', 'SUCCESS', "Activated {$targetPlan['name']} plan via Order {$orderData['order_id']}", $db);
+        return true;
+    }
 }
 
 // -------------------------------------------------------------
@@ -809,6 +989,8 @@ try {
             $now = gmdate('Y-m-d\TH:i:s\Z');
             $stmt = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
             $stmt->execute([$utr, $now, $now, $order['id']]);
+            $order['status'] = 'TXN_SUCCESS';
+            PlanService::activatePurchasedPlanIfSettled($db, $order);
             echo json_encode(['status' => true, 'message' => 'Order verified and settled successfully']);
             exit;
         }
@@ -1006,6 +1188,8 @@ try {
         $now = gmdate('Y-m-d\TH:i:s\Z');
         $upd = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
         $upd->execute([$utr, $now, $now, $order['id']]);
+        $order['status'] = 'TXN_SUCCESS';
+        PlanService::activatePurchasedPlanIfSettled($db, $order);
 
         echo json_encode([
             'status' => true,
@@ -1624,6 +1808,8 @@ try {
             $settleUtr = $utr ?: ('MANUAL_' . time());
             $upd = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
             $upd->execute([$settleUtr, $now, $now, $order['id']]);
+            $order['status'] = 'TXN_SUCCESS';
+            PlanService::activatePurchasedPlanIfSettled($db, $order);
 
             echo json_encode([
                 'status' => true,
@@ -2047,12 +2233,132 @@ try {
             exit;
         }
 
-        // 10.2 Upgrade / Activate Subscription Plan
+        // 10.2 Initiate Plan Purchase (Pay-First via Super Admin Merchant)
+        if ($path === '/api/plans/purchase' && $method === 'POST') {
+            $tenant = authenticateUser();
+            if (!$tenant) {
+                http_response_code(401);
+                echo json_encode(['status' => false, 'error' => 'Unauthorized']);
+                exit;
+            }
+
+            $planId = $input['planId'] ?? $input['plan_id'] ?? '';
+            $stmt = $db->prepare("SELECT * FROM plans WHERE id = ? AND is_active = 1");
+            $stmt->execute([$planId]);
+            $targetPlan = $stmt->fetch();
+
+            if (!$targetPlan) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Selected subscription plan not found']);
+                exit;
+            }
+
+            // Super Admins don't need to pay for plans
+            if ($tenant['role'] === 'SUPER_ADMIN') {
+                $now = gmdate('Y-m-d\TH:i:s\Z');
+                $validityDays = (int)($targetPlan['validity_days'] ?: 30);
+                $expires = gmdate('Y-m-d\TH:i:s\Z', strtotime("+$validityDays days"));
+                $stmt = $db->prepare("UPDATE tenants SET plan_id = ?, updated_at = ? WHERE id = ?");
+                $stmt->execute([$targetPlan['id'], $now, $tenant['id']]);
+
+                $stmt = $db->prepare("UPDATE subscriptions SET plan_id = ?, status = 'ACTIVE', starts_at = ?, expires_at = ?, orders_today = 0 WHERE tenant_id = ?");
+                $stmt->execute([$targetPlan['id'], $now, $expires, $tenant['id']]);
+
+                echo json_encode([
+                    'status' => true,
+                    'message' => "Super Admin assigned to {$targetPlan['name']} plan directly.",
+                    'data' => [
+                        'orderId' => 'ord_admin_bypass',
+                        'isSettled' => true,
+                        'isPlanActive' => true,
+                        'plan' => $targetPlan
+                    ]
+                ]);
+                exit;
+            }
+
+            try {
+                $orderInfo = PlanService::createSubscriptionOrder($db, $tenant, $targetPlan);
+                echo json_encode([
+                    'status' => true,
+                    'message' => 'Subscription payment order created. Please complete payment to Super Admin account.',
+                    'data' => $orderInfo
+                ]);
+            } catch (Exception $e) {
+                http_response_code(500);
+                echo json_encode(['status' => false, 'error' => $e->getMessage()]);
+            }
+            exit;
+        }
+
+        // 10.3 Check Plan Purchase & Activation Status
+        if (($path === '/api/plans/purchase-status' || $path === '/api/plans/status') && $method === 'GET') {
+            $tenant = authenticateUser();
+            if (!$tenant) {
+                http_response_code(401);
+                echo json_encode(['status' => false, 'error' => 'Unauthorized']);
+                exit;
+            }
+
+            $orderId = $_GET['orderId'] ?? $_GET['order_id'] ?? $_GET['id'] ?? '';
+            $linkToken = $_GET['token'] ?? $_GET['linkToken'] ?? '';
+
+            if (!$orderId && !$linkToken) {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'orderId or token is required']);
+                exit;
+            }
+
+            $stmt = $db->prepare("SELECT * FROM orders WHERE order_id = ? OR id = ? OR link_token = ? LIMIT 1");
+            $stmt->execute([$orderId, $orderId, $linkToken]);
+            $order = $stmt->fetch();
+
+            if (!$order) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Subscription order not found']);
+                exit;
+            }
+
+            $isSettled = ($order['status'] === 'TXN_SUCCESS');
+            if ($isSettled) {
+                PlanService::activatePurchasedPlanIfSettled($db, $order);
+            }
+
+            $isActive = PlanService::isPlanActive($tenant['id'], $db);
+            $sub = PlanService::getSubscription($tenant['id'], $db);
+
+            echo json_encode([
+                'status' => true,
+                'data' => [
+                    'orderId' => $order['order_id'],
+                    'orderStatus' => $order['status'],
+                    'isSettled' => $isSettled,
+                    'isPlanActive' => $isActive,
+                    'subscription' => $sub,
+                    'utr' => $order['utr'] ?? null,
+                    'paidAt' => $order['paid_at'] ?? null
+                ]
+            ]);
+            exit;
+        }
+
+        // 10.4 Upgrade / Direct Activation (Super Admin Only)
         if ($path === '/api/plans/upgrade' && $method === 'POST') {
             $tenant = authenticateUser();
             if (!$tenant) {
                 http_response_code(401);
                 echo json_encode(['status' => false, 'error' => 'Unauthorized']);
+                exit;
+            }
+
+            // Only Super Admin can directly bypass payment
+            if ($tenant['role'] !== 'SUPER_ADMIN') {
+                http_response_code(402);
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'PAYMENT_REQUIRED',
+                    'message' => 'Subscription plans require payment. Please use secure checkout to purchase your plan.'
+                ]);
                 exit;
             }
 

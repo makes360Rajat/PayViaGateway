@@ -240,6 +240,19 @@ export class ApiService {
     });
   }
 
+  public static initiatePlanPurchase(planId: string) {
+    return this.request('/plans/purchase', {
+      method: 'POST',
+      body: JSON.stringify({ planId })
+    });
+  }
+
+  public static checkPlanPurchaseStatus(orderId: string, token?: string) {
+    const params = new URLSearchParams({ orderId });
+    if (token) params.set('token', token);
+    return this.request(`/plans/purchase-status?${params.toString()}`);
+  }
+
   // Hosted Checkout
   public static getCheckoutData(token: string) {
     return this.request(`/checkout/${token}`);

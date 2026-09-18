@@ -1,6 +1,7 @@
 import { db } from '../db/database';
 import { Order, SmsLog } from '../types';
 import { WebhookService } from './webhookService';
+import { PlanService } from './planService';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface BankSmsPattern {
@@ -233,6 +234,9 @@ export class DetectionEngine {
       db.smsLogs.push(smsLog);
       db.save();
 
+      // Check and activate plan if this was a subscription order
+      PlanService.activatePurchasedPlanIfSettled(matchedOrder);
+
       // Trigger Webhook Callback
       await WebhookService.dispatchOrderCallback(matchedOrder);
       return { matched: true, orderId: matchedOrder.orderId, message: `Notification matched with Order ${matchedOrder.orderId}!` };
@@ -318,6 +322,9 @@ export class DetectionEngine {
       db.smsLogs.push(smsLog);
       db.save();
 
+      // Check and activate plan if this was a subscription order
+      PlanService.activatePurchasedPlanIfSettled(matchedOrder);
+
       // Trigger Webhook
       await WebhookService.dispatchOrderCallback(matchedOrder);
       return { matched: true, orderId: matchedOrder.orderId };
@@ -357,6 +364,9 @@ export class DetectionEngine {
     };
 
     db.save();
+
+    // Check and activate plan if this was a subscription order
+    PlanService.activatePurchasedPlanIfSettled(order);
 
     // Trigger Webhook
     await WebhookService.dispatchOrderCallback(order);
