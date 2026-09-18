@@ -51,10 +51,14 @@ class ApiClient {
     await prefs.setString('device_token', token);
   }
 
-  static Future<void> disconnectDevice() async {
+  static Future<void> clearPairing() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('device_token');
     await prefs.remove('pairing_code');
+  }
+
+  static Future<void> disconnectDevice() async {
+    await clearPairing();
   }
 
   static Future<String?> getPairingCode() async {
@@ -108,10 +112,16 @@ class ApiClient {
     }
   }
 
-  static Future<bool> sendHeartbeat() async {
+  static Future<Map<String, dynamic>> sendHeartbeat() async {
     try {
       final token = await getDeviceToken();
-      if (token == null) return false;
+      if (token == null) {
+        return {
+          'isSuccess': false,
+          'isDisconnected': true,
+          'isPaused': false,
+        };
+      }
 
       final baseUrl = await getServerUrl();
       final url = Uri.parse('$baseUrl/api/devices/heartbeat');
@@ -126,9 +136,32 @@ class ApiClient {
         }),
       );
 
-      return response.statusCode == 200;
+      Map<String, dynamic> data = {};
+      try {
+        data = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (_) {}
+
+      final isDisconnected = response.statusCode == 404 || 
+                             data['code'] == 'DEVICE_DISCONNECTED' || 
+                             data['isDisconnected'] == true;
+      final isPaused = data['isPaused'] == true || 
+                       data['status'] == 'PAUSED' || 
+                       (data['data'] is Map && data['data']['status'] == 'PAUSED');
+
+      return {
+        'isSuccess': response.statusCode == 200,
+        'isPaused': isPaused,
+        'isDisconnected': isDisconnected,
+        'deviceStatus': isPaused ? 'PAUSED' : 'ACTIVE',
+        'raw': data,
+      };
     } catch (e) {
-      return false;
+      return {
+        'isSuccess': false,
+        'isPaused': false,
+        'isDisconnected': false,
+        'error': e.toString(),
+      };
     }
   }
 
@@ -229,7 +262,23 @@ class ApiClient {
 
       debugPrint('>>> API URI: $uri | STATUS: ${response.statusCode} | BODY: ${response.body.length > 100 ? response.body.substring(0, 100) : response.body}');
 
-      return jsonDecode(response.body);
+      Map<String, dynamic> data = {};
+      try {
+        data = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (_) {}
+
+      if (response.statusCode == 404 || data['code'] == 'DEVICE_DISCONNECTED' || data['isDisconnected'] == true) {
+        return {
+          'status': false,
+          'code': 'DEVICE_DISCONNECTED',
+          'isDisconnected': true,
+          'error': data['error'] ?? 'Device was disconnected or removed from dashboard',
+          'orders': [],
+          'data': [],
+        };
+      }
+
+      return data;
     } catch (e) {
       debugPrint('>>> FETCH ORDERS ERR: $e');
       return {'status': false, 'error': e.toString()};

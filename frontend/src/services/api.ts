@@ -137,6 +137,12 @@ export class ApiService {
     });
   }
 
+  public static toggleDevice(id: string) {
+    return this.request(`/devices/${id}/toggle`, {
+      method: 'POST'
+    });
+  }
+
   public static deleteDevice(id: string) {
     return this.request(`/devices/${id}`, {
       method: 'DELETE'

@@ -21,6 +21,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   static const EventChannel _liveStreamChannel = EventChannel('com.payvia.gateway/live_stream');
 
   bool _isPaired = false;
+  bool _isDevicePaused = false;
+  String? _disconnectNotice;
   String? _pairingCode;
   String _serverUrl = 'https://payvia360.com';
   bool _isOnline = false;
@@ -77,6 +79,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _initLiveStreamListener() {
     try {
       _liveStreamSubscription = _liveStreamChannel.receiveBroadcastStream().listen((dynamic event) {
+        if (_isDevicePaused) {
+          // Sensing is paused remotely from dashboard - ignore incoming notifications
+          return;
+        }
         if (event is Map) {
           final packageName = (event['packageName'] ?? '').toString();
           final title = (event['title'] ?? '').toString();
@@ -180,6 +186,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  Future<void> _handleDeviceDisconnected({String? reason}) async {
+    _heartbeatTimer?.cancel();
+    _ordersPollTimer?.cancel();
+    await ApiClient.clearPairing();
+    if (!mounted) return;
+    setState(() {
+      _isPaired = false;
+      _isDevicePaused = false;
+      _isOnline = false;
+      _orders = [];
+      _totalOrders = 0;
+      _countAll = 0;
+      _countVerified = 0;
+      _countPending = 0;
+      _countRejected = 0;
+      _disconnectNotice = reason ?? 'This Android gateway device was disconnected or removed from the PayVia Web Dashboard. All order data has been purged.';
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.link_off_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                _disconnectNotice!,
+                style: GoogleFonts.dmSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.redAccent.shade700,
+        duration: const Duration(seconds: 6),
+      ),
+    );
+  }
+
   Future<void> _checkPairingStatus() async {
     final token = await ApiClient.getDeviceToken();
     final code = await ApiClient.getPairingCode();
@@ -198,6 +241,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _ordersPollTimer?.cancel();
       setState(() {
         _isPaired = false;
+        _isDevicePaused = false;
         _pairingCode = code;
         _serverUrl = url;
         _batteryLevel = battery;
@@ -209,20 +253,34 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _startHeartbeat() {
     _heartbeatTimer?.cancel();
     _heartbeatTimer = Timer.periodic(const Duration(seconds: 30), (timer) async {
-      final success = await ApiClient.sendHeartbeat();
+      final statusMap = await ApiClient.sendHeartbeat();
+      if (statusMap['isDisconnected'] == true) {
+        await _handleDeviceDisconnected();
+        return;
+      }
+      final isPaused = statusMap['isPaused'] == true;
+      final isOnline = statusMap['isSuccess'] == true;
       final battery = await ApiClient.getBatteryLevel();
       if (mounted) {
         setState(() {
-          _isOnline = success;
+          _isOnline = isOnline;
+          _isDevicePaused = isPaused;
           _batteryLevel = battery;
         });
       }
     });
-    ApiClient.sendHeartbeat().then((s) async {
+    ApiClient.sendHeartbeat().then((statusMap) async {
+      if (statusMap['isDisconnected'] == true) {
+        await _handleDeviceDisconnected();
+        return;
+      }
+      final isPaused = statusMap['isPaused'] == true;
+      final isOnline = statusMap['isSuccess'] == true;
       final battery = await ApiClient.getBatteryLevel();
       if (mounted) {
         setState(() {
-          _isOnline = s;
+          _isOnline = isOnline;
+          _isDevicePaused = isPaused;
           _batteryLevel = battery;
         });
       }
@@ -271,6 +329,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       if (!mounted) return;
 
+      if (res['isDisconnected'] == true || res['code'] == 'DEVICE_DISCONNECTED') {
+        await _handleDeviceDisconnected(reason: res['error']);
+        return;
+      }
+
+      if (res['isPaused'] == true) {
+        setState(() => _isDevicePaused = true);
+      } else if (res['status'] == true) {
+        setState(() => _isDevicePaused = false);
+      }
+
       if (res['status'] == true) {
         final List rawOrders = (res['orders'] as List?) ?? (res['data'] as List?) ?? [];
         final nextBatch = rawOrders.map((o) => GatewayOrder.fromJson(Map<String, dynamic>.from(o))).toList();
@@ -314,6 +383,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       if (!mounted) return;
 
+      if (res['isDisconnected'] == true || res['code'] == 'DEVICE_DISCONNECTED') {
+        await _handleDeviceDisconnected(reason: res['error']);
+        return;
+      }
+
+      if (res['isPaused'] == true) {
+        setState(() => _isDevicePaused = true);
+      } else if (res['status'] == true) {
+        setState(() => _isDevicePaused = false);
+      }
+
       if (res['status'] == true) {
         final List rawOrders = (res['orders'] as List?) ?? (res['data'] as List?) ?? [];
         final parsed = rawOrders.map((o) => GatewayOrder.fromJson(Map<String, dynamic>.from(o))).toList();
@@ -348,6 +428,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _showSettleOrderDialog(GatewayOrder order) async {
+    if (_isDevicePaused) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Gateway is paused from the Web Dashboard. Settle & Cancel actions are frozen.'),
+          backgroundColor: Colors.amber,
+        ),
+      );
+      return;
+    }
     final utrController = TextEditingController();
     final bool? confirm = await showDialog<bool>(
       context: context,
@@ -461,6 +550,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _showCancelOrderDialog(GatewayOrder order) async {
+    if (_isDevicePaused) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('⚠️ Gateway is paused from the Web Dashboard. Settle & Cancel actions are frozen.'),
+          backgroundColor: Colors.amber,
+        ),
+      );
+      return;
+    }
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -669,6 +767,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           // Top Battery Optimization Warning Banner (if not ignored)
           if (!_isBatteryOptIgnored) _buildCompactBatteryBanner(),
 
+          // Top Gateway Paused Banner (when paused remotely from Web Dashboard)
+          if (_isPaired && _isDevicePaused) _buildDevicePausedBanner(),
+
           if (!_isPaired)
             Expanded(
               child: SingleChildScrollView(
@@ -762,6 +863,52 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
+  Widget _buildDevicePausedBanner() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.amber.shade900.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.amber.shade500.withValues(alpha: 0.8), width: 1.2),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade500.withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.pause_circle_filled_rounded, color: Colors.amberAccent, size: 22),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'GATEWAY PAUSED FROM WEB DASHBOARD',
+                  style: GoogleFonts.spaceGrotesk(
+                    color: Colors.amberAccent,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'SMS detection and settlement/cancel actions are temporarily disabled until resumed from the dashboard.',
+                  style: GoogleFonts.dmSans(color: Colors.white.withValues(alpha: 0.9), fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTabsHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
@@ -788,11 +935,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     width: 8,
                     height: 8,
                     decoration: BoxDecoration(
-                      color: _isOnline ? const Color(0xFF10B981) : Colors.amber,
+                      color: _isDevicePaused
+                          ? Colors.amber
+                          : (_isOnline ? const Color(0xFF10B981) : Colors.redAccent),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: (_isOnline ? const Color(0xFF10B981) : Colors.amber).withValues(alpha: 0.6),
+                          color: (_isDevicePaused
+                                  ? Colors.amber
+                                  : (_isOnline ? const Color(0xFF10B981) : Colors.redAccent))
+                              .withValues(alpha: 0.6),
                           blurRadius: 6,
                         ),
                       ],
@@ -802,19 +954,42 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Connected Admin Orders',
-                        style: GoogleFonts.spaceGrotesk(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'Connected Admin Orders',
+                            style: GoogleFonts.spaceGrotesk(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                          if (_isDevicePaused) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: Colors.amber.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
+                              ),
+                              child: Text(
+                                'PAUSED',
+                                style: GoogleFonts.jetBrainsMono(
+                                  color: Colors.amberAccent,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 1),
                       Text(
-                        '$_serverUrl • ${_pairingCode ?? "ACTIVE"}',
+                        '$_serverUrl • ${_pairingCode ?? "ACTIVE"}${_isDevicePaused ? " • Remote Sensing Paused" : ""}',
                         style: GoogleFonts.dmSans(
-                          color: const Color(0xFF88A0CB),
+                          color: _isDevicePaused ? Colors.amberAccent : const Color(0xFF88A0CB),
                           fontSize: 10,
                         ),
                       ),
@@ -939,19 +1114,33 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             decoration: BoxDecoration(
               color: const Color(0xFF090D16),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.white10),
+              border: Border.all(
+                color: _isDevicePaused ? Colors.amber.withValues(alpha: 0.3) : Colors.white10,
+              ),
             ),
             child: Column(
               children: [
-                Icon(Icons.inbox_outlined, size: 40, color: Colors.white.withValues(alpha: 0.25)),
+                Icon(
+                  _isDevicePaused ? Icons.pause_circle_outline_rounded : Icons.inbox_outlined,
+                  size: 40,
+                  color: _isDevicePaused ? Colors.amberAccent : Colors.white.withValues(alpha: 0.25),
+                ),
                 const SizedBox(height: 12),
                 Text(
-                  'No ${_selectedOrderTab.toLowerCase()} orders found',
-                  style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500),
+                  _isDevicePaused
+                      ? 'Gateway Paused from Dashboard'
+                      : 'No ${_selectedOrderTab.toLowerCase()} orders found',
+                  style: GoogleFonts.dmSans(
+                    color: _isDevicePaused ? Colors.amberAccent : Colors.white70,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Pull down to refresh or wait for incoming customer checkouts.',
+                  _isDevicePaused
+                      ? 'Order sensing and actions are suspended until resumed on the Web Dashboard.'
+                      : 'Pull down to refresh or wait for incoming customer checkouts.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.dmSans(color: Colors.white38, fontSize: 11),
                 ),
@@ -1160,56 +1349,99 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildPairPrompt() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: const Color(0xFF111827),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        children: [
+    return Column(
+      children: [
+        if (_disconnectNotice != null) ...[
           Container(
-            padding: const EdgeInsets.all(12),
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+              color: Colors.redAccent.shade700.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.redAccent.shade400.withValues(alpha: 0.6), width: 1.2),
             ),
-            child: const Icon(Icons.phonelink_ring_rounded, color: Color(0xFF00E5FF), size: 36),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Pair Device to View Admin Orders',
-            style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Connect this companion app to your merchant gateway to review live store orders, verify settlements, or cancel orders.',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.dmSans(color: Colors.white60, fontSize: 12),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00E5FF),
-              foregroundColor: const Color(0xFF060B16),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.link_off_rounded, color: Colors.redAccent, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Device Disconnected Remotely',
+                        style: GoogleFonts.spaceGrotesk(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _disconnectNotice!,
+                        style: GoogleFonts.dmSans(color: Colors.white70, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            onPressed: () async {
-              final res = await Navigator.push<bool>(
-                context,
-                MaterialPageRoute(builder: (_) => const PairingScreen()),
-              );
-              if (res == true) {
-                _checkPairingStatus();
-              }
-            },
-            icon: const Icon(Icons.qr_code_rounded, size: 16),
-            label: Text('Pair Device Now', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 13)),
           ),
         ],
-      ),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF111827),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.phonelink_ring_rounded, color: Color(0xFF00E5FF), size: 36),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Pair Device to View Admin Orders',
+                style: GoogleFonts.spaceGrotesk(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Connect this companion app to your merchant gateway to review live store orders, verify settlements, or cancel orders.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.dmSans(color: Colors.white60, fontSize: 12),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00E5FF),
+                  foregroundColor: const Color(0xFF060B16),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+                onPressed: () async {
+                  final res = await Navigator.push<bool>(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PairingScreen()),
+                  );
+                  if (res == true) {
+                    _checkPairingStatus();
+                  }
+                },
+                icon: const Icon(Icons.qr_code_rounded, size: 16),
+                label: Text('Pair Device Now', style: GoogleFonts.spaceGrotesk(fontWeight: FontWeight.bold, fontSize: 13)),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1418,44 +1650,72 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const SizedBox(height: 10),
             Container(height: 1, color: Colors.white10),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      elevation: 0,
+            if (_isDevicePaused) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.pause_circle_outline_rounded, color: Colors.amber, size: 15),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Gateway Paused on Dashboard: Actions Frozen',
+                        style: GoogleFonts.dmSans(
+                          color: Colors.amber.shade200,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    onPressed: () => _showSettleOrderDialog(order),
-                    icon: const Icon(Icons.check_circle_rounded, size: 14),
-                    label: Text(
-                      'Settle Order',
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 12),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                      onPressed: () => _showSettleOrderDialog(order),
+                      icon: const Icon(Icons.check_circle_rounded, size: 14),
+                      label: Text(
+                        'Settle Order',
+                        style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.6)),
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    onPressed: () => _showCancelOrderDialog(order),
-                    icon: const Icon(Icons.cancel_outlined, size: 14),
-                    label: Text(
-                      'Cancel Order',
-                      style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 12),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.6)),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () => _showCancelOrderDialog(order),
+                      icon: const Icon(Icons.cancel_outlined, size: 14),
+                      label: Text(
+                        'Cancel Order',
+                        style: GoogleFonts.dmSans(fontWeight: FontWeight.bold, fontSize: 12),
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
+            ],
           ],
         ],
       ),

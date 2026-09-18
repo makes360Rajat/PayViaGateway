@@ -96,6 +96,7 @@ export interface PairedDevice {
   isOnline: boolean;
   lastHeartbeatAt: string;
   smsCapturedCount: number;
+  status?: 'ACTIVE' | 'PAUSED';
   createdAt: string;
 }
 

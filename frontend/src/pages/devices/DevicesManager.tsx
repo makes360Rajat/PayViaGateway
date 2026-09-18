@@ -15,12 +15,16 @@ import {
   Radio, 
   RefreshCw,
   Sparkles,
-  Server
+  Server,
+  Pause,
+  Play,
+  AlertTriangle
 } from 'lucide-react';
 
 export const DevicesManager: React.FC = () => {
   const [devices, setDevices] = useState<PairedDevice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   // Pairing Modal
   const [showPairModal, setShowPairModal] = useState(false);
@@ -154,12 +158,34 @@ export const DevicesManager: React.FC = () => {
     }
   };
 
+  const handleToggleDevice = async (device: PairedDevice) => {
+    const isPausing = device.status !== 'PAUSED';
+    const msg = isPausing
+      ? 'Pause this Android gateway? Automatic SMS credit sensing, auto-settlement, and manual order actions will be temporarily halted on this phone.'
+      : 'Resume this Android gateway? Automatic SMS sensing and order settlement authorities will be immediately restored.';
+    
+    if (!confirm(msg)) return;
+
+    setTogglingId(device.id);
+    try {
+      await ApiService.toggleDevice(device.id);
+      await loadDevices();
+    } catch (e) {
+      console.error('Error toggling device status:', e);
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
   const handleDeleteDevice = async (id: string) => {
-    if (confirm('Disconnect this Android gateway device?')) {
+    if (confirm('Disconnect & Remove this Android gateway? All active orders on the companion app will be purged immediately, credentials wiped, and order sensing revoked.')) {
       await ApiService.deleteDevice(id);
       loadDevices();
     }
   };
+
+  const onlineCount = devices.filter(d => d.isOnline && d.status !== 'PAUSED').length;
+  const pausedCount = devices.filter(d => d.status === 'PAUSED').length;
 
   return (
     <div className="space-y-6">
@@ -170,8 +196,13 @@ export const DevicesManager: React.FC = () => {
           <div className="flex items-center gap-2">
             <h1 className="font-display text-2xl font-bold text-white">Android SMS & Notification Gateway</h1>
             <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-xs font-mono text-emerald-400">
-              {devices.filter(d => d.isOnline).length} Online
+              {onlineCount} Online
             </span>
+            {pausedCount > 0 && (
+              <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-xs font-mono text-amber-400">
+                {pausedCount} Paused
+              </span>
+            )}
           </div>
           <p className="mt-1 text-xs text-slate-400">
             Pair any Android phone with the PayVia Companion App to automatically capture bank credit SMS from 50+ Indian banks.
@@ -220,67 +251,132 @@ export const DevicesManager: React.FC = () => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {devices.map((device) => (
-            <div 
-              key={device.id} 
-              className="glass-card p-5 rounded-2xl border border-white/5 space-y-4 hover:border-emerald-500/30 transition relative overflow-hidden"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-                    <Smartphone className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-sm text-white">{device.deviceName || 'Android SMS Gateway'}</h3>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <span className={`h-2 w-2 rounded-full ${device.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
-                      <span className="text-[10px] font-mono text-slate-400">{device.isOnline ? 'Active Gateway' : 'Offline'}</span>
+          {devices.map((device) => {
+            const isPaused = device.status === 'PAUSED';
+            const isToggling = togglingId === device.id;
+
+            return (
+              <div 
+                key={device.id} 
+                className={`glass-card p-5 rounded-2xl border transition relative overflow-hidden space-y-4 ${
+                  isPaused 
+                    ? 'border-amber-500/30 bg-amber-950/10' 
+                    : device.isOnline 
+                      ? 'border-white/5 hover:border-emerald-500/30' 
+                      : 'border-white/5 opacity-80'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${
+                      isPaused 
+                        ? 'bg-amber-500/20 text-amber-400' 
+                        : 'bg-emerald-500/10 text-emerald-400'
+                    }`}>
+                      <Smartphone className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-sm text-white">{device.deviceName || 'Android SMS Gateway'}</h3>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        {isPaused ? (
+                          <>
+                            <span className="h-2 w-2 rounded-full bg-amber-400" />
+                            <span className="text-[10px] font-mono text-amber-400 font-semibold">PAUSED (SENSING OFF)</span>
+                          </>
+                        ) : device.isOnline ? (
+                          <>
+                            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                            <span className="text-[10px] font-mono text-emerald-400">ACTIVE GATEWAY</span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="h-2 w-2 rounded-full bg-slate-500" />
+                            <span className="text-[10px] font-mono text-slate-400">OFFLINE</span>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => handleDeleteDevice(device.id)}
+                    title="Disconnect & Wipe Device"
+                    className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
                 </div>
 
-                <button
-                  onClick={() => handleDeleteDevice(device.id)}
-                  title="Disconnect Phone"
-                  className="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-500/10 transition"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
+                {/* Paused warning ribbon */}
+                {isPaused && (
+                  <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-2.5 flex items-center gap-2 text-[11px] text-amber-300">
+                    <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />
+                    <span>Gateway is paused. SMS capture, order polling, and settlement are frozen on this phone.</span>
+                  </div>
+                )}
 
-              <div className="rounded-xl bg-slate-900/60 p-3 border border-white/5 space-y-2 text-xs font-mono">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-400">Battery Level:</span>
-                  <span className="text-emerald-400 font-bold flex items-center gap-1">
-                    <Battery className="h-3.5 w-3.5" />
-                    {device.batteryLevel ?? 100}%
-                  </span>
+                <div className="rounded-xl bg-slate-900/60 p-3 border border-white/5 space-y-2 text-xs font-mono">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-400">Battery Level:</span>
+                    <span className="text-emerald-400 font-bold flex items-center gap-1">
+                      <Battery className="h-3.5 w-3.5" />
+                      {device.batteryLevel ?? 100}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">SMS Captured:</span>
+                    <span className="text-white font-bold">{device.smsCapturedCount || 0} Transactions</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Pairing Code:</span>
+                    <span className="text-amber-400 font-bold">{device.pairingCode || 'PAIR-SYNCED'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Last Heartbeat:</span>
+                    <span className="text-slate-300 text-[10px]">
+                      {device.lastHeartbeatAt ? formatIST(device.lastHeartbeatAt, { timeOnly: true, includeSeconds: true }) : 'Recent'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">SMS Captured:</span>
-                  <span className="text-white font-bold">{device.smsCapturedCount || 0} Transactions</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Pairing Code:</span>
-                  <span className="text-amber-400 font-bold">{device.pairingCode || 'PAIR-SYNCED'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Last Heartbeat:</span>
-                  <span className="text-slate-300 text-[10px]">
-                    {device.lastHeartbeatAt ? formatIST(device.lastHeartbeatAt, { timeOnly: true, includeSeconds: true }) : 'Recent'}
-                  </span>
-                </div>
-              </div>
 
-              <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] text-slate-400">
-                <span className="font-mono">Token: {(device.deviceToken || '').slice(0, 14)}...</span>
-                <span className="font-mono text-emerald-400 flex items-center gap-1">
-                  <Radio className="h-3 w-3 animate-pulse" />
-                  SYNCED
-                </span>
+                {/* Remote Device Control Buttons */}
+                <div className="pt-2 border-t border-white/5 flex items-center gap-2">
+                  <button
+                    onClick={() => handleToggleDevice(device)}
+                    disabled={isToggling}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition border ${
+                      isPaused
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
+                    }`}
+                  >
+                    {isToggling ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : isPaused ? (
+                      <>
+                        <Play className="h-3.5 w-3.5 fill-current" />
+                        <span>Resume Gateway</span>
+                      </>
+                    ) : (
+                      <>
+                        <Pause className="h-3.5 w-3.5 fill-current" />
+                        <span>Pause Gateway</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteDevice(device.id)}
+                    title="Disconnect & Discard"
+                    className="px-3 py-2 rounded-xl text-xs font-bold text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 transition flex items-center gap-1"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Disconnect</span>
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

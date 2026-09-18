@@ -68,6 +68,7 @@ function getDb(): PDO {
         try { $pdo->exec("ALTER TABLE tenant_template_settings ADD COLUMN logo_url VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE tenant_template_settings ADD COLUMN support_note VARCHAR(255) DEFAULT NULL"); } catch (Exception $e) {}
         try { $pdo->exec("ALTER TABLE contact_messages ADD COLUMN reply_notes TEXT DEFAULT NULL"); } catch (Exception $e) {}
+        try { $pdo->exec("ALTER TABLE devices ADD COLUMN status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE'"); } catch (Exception $e) {}
 
         // Enforce proper system roles: pankajpanks007@gmail.com is strictly MERCHANT, admin@payvia.vip is SUPER_ADMIN
         try {
@@ -1107,23 +1108,81 @@ try {
             }
         }
 
-        // C. Companion App Heartbeat
+        // C. Toggle Device Status (Dashboard: Active <-> Paused)
+        if (preg_match('#^/api/devices/([^/]+)/toggle$#', $path, $m) || ($path === '/api/devices/toggle' && $method === 'POST')) {
+            $tenant = authenticateUser();
+            if (!$tenant) {
+                http_response_code(401);
+                echo json_encode(['status' => false, 'error' => 'Unauthorized']);
+                exit;
+            }
+
+            $devId = $m[1] ?? $input['id'] ?? $_GET['id'] ?? '';
+            $stmt = $db->prepare("SELECT * FROM devices WHERE id = ? AND tenant_id = ?");
+            $stmt->execute([$devId, $tenant['id']]);
+            $device = $stmt->fetch();
+
+            if (!$device) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Device not found']);
+                exit;
+            }
+
+            $newStatus = (($device['status'] ?? 'ACTIVE') === 'PAUSED') ? 'ACTIVE' : 'PAUSED';
+            $upd = $db->prepare("UPDATE devices SET status = ? WHERE id = ?");
+            $upd->execute([$newStatus, $device['id']]);
+
+            echo json_encode([
+                'status' => true,
+                'message' => "Device is now " . strtolower($newStatus),
+                'deviceStatus' => $newStatus,
+                'data' => array_merge($device, ['status' => $newStatus])
+            ]);
+            exit;
+        }
+
+        // D. Companion App Heartbeat
         if ($path === '/api/devices/heartbeat') {
             $deviceToken = $input['deviceToken'] ?? $input['deviceId'] ?? '';
             $batteryLevel = isset($input['batteryLevel']) ? (int)$input['batteryLevel'] : null;
             $now = gmdate('Y-m-d\TH:i:s\Z');
 
-            if ($deviceToken) {
-                if ($batteryLevel !== null) {
-                    $upd = $db->prepare("UPDATE devices SET is_online = 1, battery_level = ?, last_heartbeat_at = ? WHERE device_token = ? OR id = ?");
-                    $upd->execute([$batteryLevel, $now, $deviceToken, $deviceToken]);
-                } else {
-                    $upd = $db->prepare("UPDATE devices SET is_online = 1, last_heartbeat_at = ? WHERE device_token = ? OR id = ?");
-                    $upd->execute([$now, $deviceToken, $deviceToken]);
-                }
+            if (!$deviceToken) {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'Device token required']);
+                exit;
             }
 
-            echo json_encode(['status' => true, 'message' => 'Heartbeat acknowledged']);
+            $stmt = $db->prepare("SELECT id, tenant_id, status, is_online FROM devices WHERE device_token = ? OR id = ? LIMIT 1");
+            $stmt->execute([$deviceToken, $deviceToken]);
+            $device = $stmt->fetch();
+
+            if (!$device) {
+                http_response_code(404);
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'DEVICE_DISCONNECTED',
+                    'message' => 'Device has been disconnected or removed from dashboard'
+                ]);
+                exit;
+            }
+
+            $devStatus = $device['status'] ?? 'ACTIVE';
+
+            if ($batteryLevel !== null) {
+                $upd = $db->prepare("UPDATE devices SET is_online = 1, battery_level = ?, last_heartbeat_at = ? WHERE id = ?");
+                $upd->execute([$batteryLevel, $now, $device['id']]);
+            } else {
+                $upd = $db->prepare("UPDATE devices SET is_online = 1, last_heartbeat_at = ? WHERE id = ?");
+                $upd->execute([$now, $device['id']]);
+            }
+
+            echo json_encode([
+                'status' => true,
+                'deviceStatus' => $devStatus,
+                'isPaused' => $devStatus === 'PAUSED',
+                'message' => $devStatus === 'PAUSED' ? 'Heartbeat acknowledged (GATEWAY PAUSED)' : 'Heartbeat acknowledged'
+            ]);
             exit;
         }
 
@@ -1153,6 +1212,20 @@ try {
         // E. Ingest Incoming SMS / Notification
         if ($path === '/api/devices/notification-ingest' || $path === '/api/devices/sms-ingest') {
             $deviceToken = $input['deviceToken'] ?? $input['device_token'] ?? $input['deviceId'] ?? 'companion_phone_1';
+
+            // Check if device is paused
+            $chkDev = $db->prepare("SELECT id, status FROM devices WHERE device_token = ? OR id = ? LIMIT 1");
+            $chkDev->execute([$deviceToken, $deviceToken]);
+            $dRow = $chkDev->fetch();
+            if ($dRow && ($dRow['status'] ?? 'ACTIVE') === 'PAUSED') {
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'DEVICE_PAUSED',
+                    'message' => 'SMS/Notification ingestion is suspended while gateway device is paused'
+                ]);
+                exit;
+            }
+
             $appName = $input['appName'] ?? $input['packageName'] ?? $input['package_name'] ?? $input['sender'] ?? 'UNKNOWN';
             $title = $input['title'] ?? '';
             $text = $input['text'] ?? $input['body'] ?? $input['message'] ?? '';
@@ -1248,6 +1321,16 @@ try {
                 exit;
             }
 
+            if (($device['status'] ?? 'ACTIVE') === 'PAUSED') {
+                http_response_code(403);
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'DEVICE_PAUSED',
+                    'message' => 'Cannot settle or verify orders while gateway device is paused from dashboard'
+                ]);
+                exit;
+            }
+
             $stmt = $db->prepare("SELECT * FROM orders WHERE (id = ? OR order_id = ?) AND tenant_id = ? LIMIT 1");
             $stmt->execute([$orderIdParam, $orderIdParam, $device['tenant_id']]);
             $order = $stmt->fetch();
@@ -1308,6 +1391,16 @@ try {
                 exit;
             }
 
+            if (($device['status'] ?? 'ACTIVE') === 'PAUSED') {
+                http_response_code(403);
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'DEVICE_PAUSED',
+                    'message' => 'Cannot cancel orders while gateway device is paused from dashboard'
+                ]);
+                exit;
+            }
+
             $stmt = $db->prepare("SELECT * FROM orders WHERE (id = ? OR order_id = ?) AND tenant_id = ? LIMIT 1");
             $stmt->execute([$orderIdParam, $orderIdParam, $device['tenant_id']]);
             $order = $stmt->fetch();
@@ -1358,14 +1451,12 @@ try {
             }
 
             if (!$device) {
-                // Fallback to most active device
-                $stmt = $db->query("SELECT * FROM devices ORDER BY created_at DESC LIMIT 1");
-                $device = $stmt->fetch();
-            }
-
-            if (!$device) {
                 http_response_code(404);
-                echo json_encode(['status' => false, 'error' => 'Device not recognized or not paired']);
+                echo json_encode([
+                    'status' => false,
+                    'error' => 'DEVICE_DISCONNECTED',
+                    'message' => 'Device has been disconnected or removed from dashboard'
+                ]);
                 exit;
             }
 
@@ -1434,8 +1525,11 @@ try {
                 ];
             }
 
+            $devStatus = $device['status'] ?? 'ACTIVE';
             echo json_encode([
                 'status' => true,
+                'deviceStatus' => $devStatus,
+                'isPaused' => $devStatus === 'PAUSED',
                 'total' => $totalFiltered,
                 'counts' => $counts,
                 'orders' => $formatted,
@@ -1473,6 +1567,7 @@ try {
                 'simSlots' => json_decode($d['sim_slots_json'] ?: '[]', true) ?: [],
                 'batteryLevel' => (int)($d['battery_level'] ?? 100),
                 'isOnline' => (bool)$d['is_online'],
+                'status' => $d['status'] ?? 'ACTIVE',
                 'lastHeartbeatAt' => $d['last_heartbeat_at'] ?: $d['created_at'],
                 'smsCapturedCount' => (int)($d['sms_captured_count'] ?? 0),
                 'createdAt' => $d['created_at'],
