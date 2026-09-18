@@ -367,17 +367,8 @@ class PlanService {
         $any = $stmt->fetch();
         if ($any) return $any;
 
-        // Synthetic fallback if super admin hasn't added one yet
-        return [
-            'id' => 'mch_admin_central',
-            'tenant_id' => $admin['id'],
-            'provider' => 'CUSTOM_UPI',
-            'label' => 'PayVia Admin Central Desk',
-            'upi_id' => 'admin@payvia',
-            'display_name' => 'PayVia Official Platform',
-            'status' => 'ACTIVE',
-            'weight' => 10
-        ];
+        // No real merchant account — force admin to add one
+        return null;
     }
 
     public static function createSubscriptionOrder($db, $buyerTenant, $targetPlan) {
@@ -1185,22 +1176,31 @@ try {
             exit;
         }
 
+        // ── REAL PAYMENT FLOW: Do NOT auto-settle on UTR submission ──────────────
+        // Store UTR as pending review. Super Admin must confirm via Admin Panel
+        // before the plan activates. Auto-settle only happens via Companion App SMS detection.
         $now = gmdate('Y-m-d\TH:i:s\Z');
-        $upd = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
-        $upd->execute([$utr, $now, $now, $order['id']]);
-        $order['status'] = 'TXN_SUCCESS';
-        PlanService::activatePurchasedPlanIfSettled($db, $order);
+        $upd = $db->prepare("UPDATE orders SET status = 'UTR_SUBMITTED', utr = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'");
+        $upd->execute([$utr, $now, $order['id']]);
+
+        PlanService::logAccess(
+            $order['tenant_id'] ?? '',
+            'UTR_SUBMITTED',
+            '/api/public/v1/order/submit-utr',
+            'PENDING',
+            "UTR {$utr} submitted for order {$order['order_id']} — awaiting Super Admin confirmation",
+            $db
+        );
 
         echo json_encode([
             'status' => true,
-            'message' => 'Payment verified successfully! UTR reference confirmed.',
+            'message' => 'UTR reference submitted successfully. Awaiting Super Admin payment confirmation.',
             'data' => [
                 'order_id' => $order['order_id'],
                 'orderId' => $order['order_id'],
-                'status' => 'TXN_SUCCESS',
+                'status' => 'UTR_SUBMITTED',
                 'utr' => $utr,
-                'paidAt' => $now,
-                'paid_at' => $now
+                'pendingReview' => true
             ]
         ]);
         exit;
