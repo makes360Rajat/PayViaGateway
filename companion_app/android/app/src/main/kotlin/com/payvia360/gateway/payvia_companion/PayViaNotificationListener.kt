@@ -1,4 +1,4 @@
-package com.payvia.gateway.payvia_companion
+package com.payvia360.gateway.payvia_companion
 
 import android.app.Notification
 import android.content.ComponentName
@@ -20,7 +20,7 @@ class PayViaNotificationListener : NotificationListenerService() {
 
     companion object {
         private const val TAG = "PayViaNotifListener"
-        const val ACTION_NOTIFICATION_CAPTURED = "com.payvia.gateway.NOTIFICATION_CAPTURED"
+        const val ACTION_NOTIFICATION_CAPTURED = "com.payvia360.gateway.NOTIFICATION_CAPTURED"
         
         // Comprehensive set of Indian UPI Apps, Merchant Soundboxes, Wallets & Banking Apps
         private val TARGET_PACKAGES = setOf(

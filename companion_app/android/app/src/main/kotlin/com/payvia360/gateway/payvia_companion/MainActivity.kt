@@ -1,4 +1,4 @@
-package com.payvia.gateway.payvia_companion
+package com.payvia360.gateway.payvia_companion
 
 import android.content.BroadcastReceiver
 import android.content.ComponentName
@@ -17,8 +17,8 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val METHOD_CHANNEL = "com.payvia.gateway/notifications"
-    private val EVENT_CHANNEL = "com.payvia.gateway/live_stream"
+    private val METHOD_CHANNEL = "com.payvia360.gateway/notifications"
+    private val EVENT_CHANNEL = "com.payvia360.gateway/live_stream"
 
     private var eventSink: EventChannel.EventSink? = null
     private var notifReceiver: BroadcastReceiver? = null

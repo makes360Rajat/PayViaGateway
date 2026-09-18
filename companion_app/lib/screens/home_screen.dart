@@ -17,8 +17,8 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  static const MethodChannel _notifChannel = MethodChannel('com.payvia.gateway/notifications');
-  static const EventChannel _liveStreamChannel = EventChannel('com.payvia.gateway/live_stream');
+  static const MethodChannel _notifChannel = MethodChannel('com.payvia360.gateway/notifications');
+  static const EventChannel _liveStreamChannel = EventChannel('com.payvia360.gateway/live_stream');
 
   bool _isPaired = false;
   bool _isDevicePaused = false;

@@ -7,7 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient {
   static const String _defaultServerUrl = 'https://payvia360.com';
-  static const MethodChannel _notifChannel = MethodChannel('com.payvia.gateway/notifications');
+  static const MethodChannel _notifChannel = MethodChannel('com.payvia360.gateway/notifications');
   
   static Future<int> getBatteryLevel() async {
     try {
