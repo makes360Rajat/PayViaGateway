@@ -416,9 +416,6 @@ export const MerchantsManager: React.FC = () => {
                 <h1 className="font-display text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
                   Connected Merchant Accounts
                 </h1>
-                <p className="text-xs sm:text-sm text-slate-400">
-                  Connect multiple Paytm, BharatPe, FamPay, Freecharge, Custom UPI & Crypto accounts. Orders rotate seamlessly across all active routes.
-                </p>
               </div>
             </div>
 
