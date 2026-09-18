@@ -18,7 +18,8 @@ import {
   Server,
   Pause,
   Play,
-  AlertTriangle
+  AlertTriangle,
+  Download
 } from 'lucide-react';
 
 export const DevicesManager: React.FC = () => {
@@ -217,6 +218,16 @@ export const DevicesManager: React.FC = () => {
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
+
+          <a
+            href="/payvia-gateway.apk"
+            download="payvia-gateway.apk"
+            title="Download Android APK"
+            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/60 px-3.5 py-2.5 text-xs font-bold text-slate-300 hover:text-white hover:border-indigo-500/40 transition"
+          >
+            <Download className="h-4 w-4 text-emerald-400" />
+            <span>Download APK</span>
+          </a>
 
           <button
             onClick={handleStartPairing}
