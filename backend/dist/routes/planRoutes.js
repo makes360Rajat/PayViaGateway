@@ -3,7 +3,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
-const uuid_1 = require("uuid");
 const planService_1 = require("../services/planService");
 const router = (0, express_1.Router)();
 // List all available plans
@@ -48,41 +47,6 @@ router.post('/purchase', auth_1.authenticateToken, (req, res) => {
     if (!targetPlan) {
         return res.status(404).json({ status: false, error: 'Selected plan not found' });
     }
-    // Super Admin can activate without payment
-    if (tenant.role === 'SUPER_ADMIN') {
-        tenant.planId = targetPlan.id;
-        tenant.updatedAt = new Date().toISOString();
-        let subscription = database_1.db.subscriptions.find(s => s.tenantId === tenantId);
-        if (!subscription) {
-            subscription = {
-                id: `sub_${(0, uuid_1.v4)().slice(0, 8)}`,
-                tenantId,
-                planId: targetPlan.id,
-                status: 'ACTIVE',
-                startsAt: new Date().toISOString(),
-                expiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString(),
-                ordersToday: 0,
-                lastResetDate: new Date().toISOString().slice(0, 10)
-            };
-            database_1.db.subscriptions.push(subscription);
-        }
-        else {
-            subscription.planId = targetPlan.id;
-            subscription.status = 'ACTIVE';
-            subscription.expiresAt = new Date(Date.now() + 365 * 24 * 3600 * 1000).toISOString();
-        }
-        database_1.db.save();
-        return res.json({
-            status: true,
-            message: `Super Admin activated ${targetPlan.name} plan directly`,
-            data: {
-                orderId: 'ord_admin_bypass',
-                isSettled: true,
-                isPlanActive: true,
-                plan: targetPlan
-            }
-        });
-    }
     try {
         const origin = req.headers['origin'] || req.headers['referer'];
         let baseUrl = 'https://payvia360.com';
@@ -116,6 +80,13 @@ router.get('/purchase-status', auth_1.authenticateToken, (req, res) => {
     if (!order) {
         return res.status(404).json({ status: false, error: 'Subscription order not found' });
     }
+    // Subscription orders belong to the buyer encoded in their protected order
+    // remark.  Do not disclose or poll another tenant's purchase by guessing an
+    // order id or link token.
+    const purchaseParts = (order.remark1 || '').split(':');
+    if (purchaseParts[0] !== 'PLAN_PURCHASE' || purchaseParts[2] !== tenantId) {
+        return res.status(403).json({ status: false, error: 'This subscription order does not belong to your account' });
+    }
     const isSettled = (order.status === 'TXN_SUCCESS');
     if (isSettled) {
         planService_1.PlanService.activatePurchasedPlanIfSettled(order);
@@ -136,50 +107,11 @@ router.get('/purchase-status', auth_1.authenticateToken, (req, res) => {
         }
     });
 });
-// Upgrade / Change Subscription Plan (Super Admin only - merchants must pay via /purchase)
+// Upgrades must use the same verified purchase flow as new subscriptions.
 router.post('/upgrade', auth_1.authenticateToken, (req, res) => {
-    const tenantId = req.tenant.id;
-    const tenant = req.tenant;
-    const { planId } = req.body;
-    if (tenant.role !== 'SUPER_ADMIN') {
-        return res.status(402).json({
-            status: false,
-            error: 'Payment required to activate plan. Please initiate plan purchase.'
-        });
-    }
-    const targetPlan = database_1.db.plans.find(p => p.id === planId && p.isActive);
-    if (!targetPlan) {
-        return res.status(404).json({ status: false, error: 'Selected plan not found' });
-    }
-    tenant.planId = targetPlan.id;
-    tenant.updatedAt = new Date().toISOString();
-    let subscription = database_1.db.subscriptions.find(s => s.tenantId === tenantId);
-    if (!subscription) {
-        subscription = {
-            id: `sub_${(0, uuid_1.v4)().slice(0, 8)}`,
-            tenantId,
-            planId: targetPlan.id,
-            status: 'ACTIVE',
-            startsAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + targetPlan.validityDays * 24 * 3600 * 1000).toISOString(),
-            ordersToday: 0,
-            lastResetDate: new Date().toISOString().slice(0, 10)
-        };
-        database_1.db.subscriptions.push(subscription);
-    }
-    else {
-        subscription.planId = targetPlan.id;
-        subscription.status = 'ACTIVE';
-        subscription.expiresAt = new Date(Date.now() + targetPlan.validityDays * 24 * 3600 * 1000).toISOString();
-    }
-    database_1.db.save();
-    return res.json({
-        status: true,
-        message: `Successfully upgraded to ${targetPlan.name} plan!`,
-        data: {
-            plan: targetPlan,
-            subscription
-        }
+    return res.status(402).json({
+        status: false,
+        error: 'Payment required. Create a verified purchase order via /plans/purchase.'
     });
 });
 exports.default = router;

@@ -108,9 +108,10 @@ export class PlanService {
     const admin = this.getSuperAdmin();
     if (!admin) return null;
     const mchs = db.merchants.filter(m => m.tenantId === admin.id && m.status === 'ACTIVE');
-    if (mchs.length > 0) return mchs[0];
-    // Fallback: any active merchant account
-    return db.merchants.find(m => m.status === 'ACTIVE') || null;
+    // The Super Admin can explicitly mark the account used for subscription
+    // collection.  Keep the first legacy admin account as a migration
+    // fallback, but never route platform money to another tenant's account.
+    return mchs.find(m => m.credentials?.isPlatformBilling === true) || mchs[0] || null;
   }
 
   public static createSubscriptionOrder(buyerTenant: Tenant, targetPlan: Plan, baseUrl?: string) {
@@ -191,6 +192,20 @@ export class PlanService {
     const remark = order.remark1 || '';
     if (!remark.startsWith('PLAN_PURCHASE:')) return false;
     if (order.status !== 'TXN_SUCCESS') return false;
+
+    // A plan order may only be activated by a receipt captured from the
+    // configured receiving account.  Dashboard/manual state changes are not
+    // payment proof and must never grant a subscription.
+    const verifiedBy = order.rawVerificationData?.matchedBy;
+    const trustedReceiptSources = new Set([
+      'SMS_GATEWAY',
+      'APP_NOTIFICATION_LISTENER',
+      'SMS_GATEWAY_CROSS_CHECK'
+    ]);
+    if (!trustedReceiptSources.has(verifiedBy)) {
+      this.logAccess('unknown', 'PLAN_ACTIVATION_UNTRUSTED_RECEIPT', 'settle', 'BLOCKED', `Order ${order.orderId} source: ${verifiedBy || 'missing'}`);
+      return false;
+    }
 
     const parts = remark.split(':');
     if (parts.length < 3) return false;

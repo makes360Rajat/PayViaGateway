@@ -382,6 +382,17 @@ export class ApiService {
     return this.request('/admin/stats');
   }
 
+  public static getAdminBillingAccount() {
+    return this.request('/admin/billing-account');
+  }
+
+  public static updateAdminBillingAccount(data: any) {
+    return this.request('/admin/billing-account', {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
   public static getAdminUsers() {
     return this.request('/admin/users');
   }

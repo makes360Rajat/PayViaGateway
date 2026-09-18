@@ -359,6 +359,13 @@ router.post('/:id/force-verify', authenticateToken, async (req: AuthenticatedReq
     return res.status(404).json({ status: false, error: 'Order not found' });
   }
 
+  if ((order.remark1 || '').startsWith('PLAN_PURCHASE:')) {
+    return res.status(403).json({
+      status: false,
+      error: 'Subscription orders cannot be force-verified. They activate only from a captured receiving-account receipt.'
+    });
+  }
+
   if ((order.mode ?? 'LIVE') === 'LIVE' && !PlanService.isPlanActive(tenantId)) {
     PlanService.logAccess(tenantId, 'SETTLEMENT_BLOCKED', req.originalUrl, 'BLOCKED', 'Active plan required for live settlement');
     return res.status(403).json({

@@ -180,7 +180,15 @@ export class DetectionEngine {
       matchedOrder = db.orders.find(o => o.orderId.toUpperCase() === targetId);
     }
 
-    // B. Amount matching fallback across pending and recently expired orders
+    // B. A submitted UTR is a more precise match than an amount: many plan
+    // purchases can share the same price at the same time.
+    if (!matchedOrder && parsed.utr) {
+      matchedOrder = db.orders.find(
+        o => o.utr === parsed.utr && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY' || o.status === 'EXPIRED')
+      );
+    }
+
+    // C. Amount matching fallback across pending and recently expired orders
     if (!matchedOrder && parsed.amount) {
       // 1. Check open orders for this tenant
       let openOrders = db.orders.filter(
@@ -204,13 +212,6 @@ export class DetectionEngine {
 
         matchedOrder = recentExpired.find(o => Math.abs(o.amount - parsed.amount!) < 0.01);
       }
-    }
-
-    // C. UTR matching if customer already submitted UTR on checkout page
-    if (!matchedOrder && parsed.utr) {
-      matchedOrder = db.orders.find(
-        o => o.utr === parsed.utr && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY' || o.status === 'EXPIRED')
-      );
     }
 
     if (matchedOrder) {
@@ -274,7 +275,14 @@ export class DetectionEngine {
       matchedOrder = db.orders.find(o => o.orderId.toUpperCase() === targetId);
     }
 
-    // 2. Amount and UTR matching
+    // 2. Prefer a submitted UTR before the amount-only fallback.
+    if (!matchedOrder && parsed.utr) {
+      matchedOrder = db.orders.find(
+        o => o.utr === parsed.utr && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY' || o.status === 'EXPIRED')
+      );
+    }
+
+    // 3. Amount matching
     if (!matchedOrder && parsed.amount) {
       let openOrders = db.orders.filter(
         o => (o.tenantId === tenantId || !tenantId) && (o.status === 'PENDING' || o.status === 'AWAITING_VERIFY')
@@ -350,16 +358,33 @@ export class DetectionEngine {
       return { success: false, message: 'UTR / UPI Reference must be a valid 12-digit number' };
     }
 
-    // Check if UTR already matched in SMS logs or automated stream
+    // A UTR entered by the payer is only a matching hint.  It must be present
+    // in a receipt captured from the receiving account before it can settle an
+    // order.  Previously this endpoint marked every syntactically valid UTR as
+    // paid, which allowed plan activation without a real payment.
     const matchingSms = db.smsLogs.find(s => s.parsedUtr === cleanUtr && s.tenantId === order.tenantId);
-    
-    // In production / live demo: confirm UTR and settle order
+    if (!matchingSms) {
+      order.status = 'AWAITING_VERIFY';
+      order.utr = cleanUtr;
+      order.updatedAt = new Date().toISOString();
+      order.rawVerificationData = {
+        matchedBy: 'CUSTOMER_UTR_SUBMITTED',
+        submittedAt: new Date().toISOString(),
+        verificationRequired: true
+      };
+      db.save();
+      return {
+        success: false,
+        message: 'UTR received. Your plan will activate only after the payment is confirmed from the Super Admin receiving account.'
+      };
+    }
+
     order.status = 'TXN_SUCCESS';
     order.utr = cleanUtr;
     order.paidAt = new Date().toISOString();
     order.updatedAt = new Date().toISOString();
     order.rawVerificationData = {
-      matchedBy: matchingSms ? 'SMS_GATEWAY_CROSS_CHECK' : 'UTR_MANUAL_SUBMISSION',
+      matchedBy: 'SMS_GATEWAY_CROSS_CHECK',
       submittedAt: new Date().toISOString()
     };
 

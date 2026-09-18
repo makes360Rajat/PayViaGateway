@@ -416,55 +416,57 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
         </div>
       )}
 
-      {/* Compact Top Banner & Control Bar */}
-      <div className="glass-panel px-4 py-3.5 sm:px-6 sm:py-4 rounded-2xl border border-white/10 relative overflow-hidden bg-gradient-to-br from-[#13131f]/90 via-[#0b0b12]/80 to-[#181028]/90 shadow-xl">
-        {/* Subtle Glowing Orbs */}
-        <div className="absolute -top-12 -right-12 w-64 h-64 bg-purple-600/10 blur-[100px] rounded-full pointer-events-none" />
-        <div className="absolute -bottom-12 -left-12 w-64 h-64 bg-sky-600/10 blur-[100px] rounded-full pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-xl bg-gradient-primary flex items-center justify-center text-white shadow-glow shrink-0">
-                <Wallet className="h-4.5 w-4.5" />
+      {/* Merchant routing command bar */}
+      <div className="relative overflow-hidden rounded-[26px] border border-indigo-400/20 bg-[#10111d] p-1 shadow-[0_20px_60px_-25px_rgba(0,0,0,0.95)]">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_0%,rgba(139,92,246,0.18),transparent_32%),radial-gradient(circle_at_92%_50%,rgba(99,102,241,0.17),transparent_30%)] pointer-events-none" />
+        <div className="relative flex flex-col gap-4 rounded-[22px] border border-white/[0.035] bg-gradient-to-r from-[#111827]/90 via-[#10111d]/96 to-[#171328]/90 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 flex-col gap-3 xl:flex-row xl:items-center xl:gap-5">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-violet-300/40 bg-gradient-to-br from-violet-400 via-violet-500 to-indigo-600 text-white shadow-[0_10px_25px_-8px_rgba(139,92,246,0.9)]">
+                <Wallet className="h-5 w-5" />
+                <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full border-2 border-[#111827] bg-emerald-400" />
               </div>
-              <h1 className="font-display text-xl sm:text-2xl font-extrabold text-white tracking-tight shrink-0">
-                Connected Merchant Accounts
-              </h1>
+              <div className="min-w-0">
+                <div className="mb-0.5 flex items-center gap-2">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-violet-300">Routing control</span>
+                  <span className="hidden h-1 w-1 rounded-full bg-slate-500 sm:block" />
+                  <span className="hidden text-[10px] font-mono text-slate-500 sm:block">LIVE GATEWAY LAYER</span>
+                </div>
+                <h1 className="truncate font-display text-xl font-extrabold tracking-tight text-white sm:text-2xl">Connected Merchant Accounts</h1>
+              </div>
             </div>
 
-            {/* Live Metrics Chips inlined to save vertical space */}
-            <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
-              <span className="rounded-full bg-white/5 border border-white/10 px-2.5 py-0.5 text-slate-300 flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-purple-400" />
-                <strong className="text-white">{merchants.length}</strong> Total Routes
+            <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.07] pt-3 font-mono text-[10px] xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-500/30 bg-slate-950/35 px-2.5 py-1 text-slate-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-400" />
+                <strong className="text-white">{merchants.length}</strong> TOTAL ROUTES
               </span>
-              <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-emerald-400 flex items-center gap-1.5 font-bold">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                <strong className="text-white">{activeCount}</strong> Live In Rotation
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-emerald-300">
+                <span className="relative flex h-1.5 w-1.5"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-300 opacity-75" /><span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400" /></span>
+                <strong className="text-white">{activeCount}</strong> LIVE IN ROTATION
               </span>
-              <span className="rounded-full bg-sky-500/10 border border-sky-500/30 px-2.5 py-0.5 text-sky-400 flex items-center gap-1.5">
-                <strong className="text-white">{totalWeight}w</strong> Weighted
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-500/10 px-2.5 py-1 text-sky-300">
+                <strong className="text-white">{totalWeight}W</strong> WEIGHTED
               </span>
-              <span className="rounded-full bg-amber-500/10 border border-amber-500/30 px-2.5 py-0.5 text-amber-400 flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-1 text-amber-300">
                 <Zap className="h-3 w-3" />
-                <strong className="text-white">{intentCount}</strong> Direct Intent
+                <strong className="text-white">{intentCount}</strong> DIRECT INTENT
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto">
+          <div className="flex items-center gap-2.5 self-end lg:self-auto">
             <button
               onClick={loadMerchants}
-              className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-900/80 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition active:scale-95"
+              className="group flex items-center gap-1.5 rounded-xl border border-white/10 bg-slate-950/45 px-3.5 py-2.5 text-xs font-semibold text-slate-300 transition hover:border-white/20 hover:bg-white/[0.08] hover:text-white active:scale-95"
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin text-purple-400' : ''}`} />
+              <RefreshCw className={`h-3.5 w-3.5 transition ${isLoading ? 'animate-spin text-violet-300' : 'group-hover:rotate-180'}`} />
               <span>Refresh</span>
             </button>
 
             <button
               onClick={() => handleStartAddProvider('PAYTM')}
-              className="flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-xs font-bold text-white shadow-glow hover:brightness-110 active:scale-95 transition"
+              className="flex items-center gap-1.5 rounded-xl border border-violet-300/30 bg-gradient-to-r from-violet-500 via-indigo-500 to-violet-500 px-4 py-2.5 text-xs font-bold text-white shadow-[0_12px_26px_-10px_rgba(124,58,237,0.95)] transition hover:brightness-110 active:scale-95"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Connect Account</span>

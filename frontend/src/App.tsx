@@ -26,6 +26,8 @@ const getPageFromPath = (path: string, user: any): string => {
   const clean = path.toLowerCase().replace(/\/+$/, '') || '/';
   
   if (clean.startsWith('/pay/')) return 'checkout';
+  // Authenticated template previews live under the payment-page section.
+  if (/^\/payment-page\/preview\/template_\d+$/.test(clean)) return 'preview';
   // Public merchant-only login
   if (clean === '/login' || clean === '/signin' || clean === '/auth' || clean === '/register' || clean === '/signup') return 'auth';
   // Secret Super Admin portal — not linked anywhere in the UI
@@ -51,7 +53,12 @@ const getPageFromPath = (path: string, user: any): string => {
   return user ? 'dashboard' : 'landing';
 };
 
-const getPathFromPage = (page: string): string => {
+const getTemplateIdFromPath = (path: string): string | null => {
+  const match = path.toLowerCase().match(/^\/payment-page\/preview\/(template_\d+)\/?$/);
+  return match ? match[1] : null;
+};
+
+const getPathFromPage = (page: string, params?: any): string => {
   switch (page) {
     case 'landing': return '/';
     case 'auth': return '/login';
@@ -63,6 +70,7 @@ const getPathFromPage = (page: string): string => {
     case 'devices': return '/devices';
     case 'api-keys': return '/api-keys';
     case 'payment-page': return '/payment-page';
+    case 'preview': return `/payment-page/preview/${params?.templateId || 'template_1'}`;
     case 'plans': return '/plans';
     case 'admin': return '/admin';
     case 'docs': return '/docs';
@@ -75,17 +83,20 @@ const getPathFromPage = (page: string): string => {
 export const MainApp: React.FC = () => {
   const { user, subscription, isLoading, isImpersonating, exitImpersonation } = useAuth();
   const [currentPage, setCurrentPage] = useState<string>(() => getPageFromPath(window.location.pathname, null));
-  const [previewTemplateId, setPreviewTemplateId] = useState<string>('template_1');
+  const [previewTemplateId, setPreviewTemplateId] = useState<string>(
+    () => getTemplateIdFromPath(window.location.pathname) || 'template_1'
+  );
   const [checkoutToken, setCheckoutToken] = useState<string | null>(() => {
     const path = window.location.pathname;
     return path.startsWith('/pay/') ? path.replace('/pay/', '').trim() : null;
   });
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
 
-  const isSubscriptionActive = 
-    user?.role === 'SUPER_ADMIN' || 
-    subscription?.status === 'ACTIVE' || 
-    (!!user && subscription?.status !== 'EXPIRED' && subscription?.status !== 'CANCELLED');
+  // A newly registered tenant has a PENDING_PAYMENT subscription.  Do not
+  // treat its existence as proof of payment; only a verified ACTIVE record
+  // unlocks the live workspace.
+  const isSubscriptionActive =
+    user?.role === 'SUPER_ADMIN' || subscription?.status === 'ACTIVE';
 
   // Sync state on browser URL popstate (Back/Forward navigation)
   useEffect(() => {
@@ -96,6 +107,8 @@ export const MainApp: React.FC = () => {
         setCheckoutToken(token);
       } else {
         setCheckoutToken(null);
+        const previewId = getTemplateIdFromPath(path);
+        if (previewId) setPreviewTemplateId(previewId);
         const resolvedPage = getPageFromPath(path, user);
         setCurrentPage(resolvedPage);
       }
@@ -113,6 +126,9 @@ export const MainApp: React.FC = () => {
       setCheckoutToken(token);
       return;
     }
+
+    const previewId = getTemplateIdFromPath(path);
+    if (previewId) setPreviewTemplateId(previewId);
 
     const resolved = getPageFromPath(path, user);
     setCurrentPage(resolved);
@@ -133,7 +149,7 @@ export const MainApp: React.FC = () => {
     setIsMobileMenuOpen(false);
 
     // Update browser URL
-    const targetPath = getPathFromPage(page);
+    const targetPath = getPathFromPage(page, params);
     if (window.location.pathname !== targetPath) {
       window.history.pushState(null, '', targetPath);
     }
@@ -151,7 +167,11 @@ export const MainApp: React.FC = () => {
     return (
       <TemplatePreview
         templateId={previewTemplateId}
-        onBack={() => handleNavigate('payment-page')}
+        onBack={() => {
+          setCurrentPage('payment-page');
+          window.history.replaceState(null, '', '/payment-page');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
       />
     );
   }

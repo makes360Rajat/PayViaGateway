@@ -851,34 +851,120 @@ export const Template11_ModernGlass: React.FC<TemplateProps> = ({ data, timeRema
 };
 
 // ============================================================================
-// MASTER ROUTER: Resolves any of the 11 template designs
+// PRODUCTION PAYMENT GATEWAY SHELL
+// Deliberately compact: the payer only sees the merchant, amount, QR / UPI
+// route, time left and an optional UTR fallback. Variants change the visual
+// treatment without changing a familiar, trustworthy payment flow.
+// ============================================================================
+const GATEWAY_THEMES = [
+  { page: 'bg-[#f6f8fc]', card: 'bg-white border-slate-200', text: 'text-slate-900', muted: 'text-slate-500', accent: '#2563eb', soft: 'bg-blue-50 border-blue-100', button: 'bg-[#2563eb] hover:bg-blue-700', label: 'UPI QUICK PAY' },
+  { page: 'bg-[#faf7ff]', card: 'bg-white border-violet-100', text: 'text-slate-900', muted: 'text-slate-500', accent: '#6d28d9', soft: 'bg-violet-50 border-violet-100', button: 'bg-violet-700 hover:bg-violet-800', label: 'SECURE UPI PAYMENT' },
+  { page: 'bg-[#f4f8ff]', card: 'bg-white border-sky-100', text: 'text-slate-900', muted: 'text-slate-500', accent: '#0284c7', soft: 'bg-sky-50 border-sky-100', button: 'bg-sky-600 hover:bg-sky-700', label: 'PAYMENT REQUEST' },
+  { page: 'bg-[#0f172a]', card: 'bg-[#172033] border-slate-700', text: 'text-white', muted: 'text-slate-400', accent: '#22c55e', soft: 'bg-emerald-500/10 border-emerald-500/20', button: 'bg-emerald-500 hover:bg-emerald-400 text-slate-950', label: 'VERIFIED CHECKOUT' },
+  { page: 'bg-[#fffbeb]', card: 'bg-[#fffefb] border-amber-200', text: 'text-stone-900', muted: 'text-stone-500', accent: '#d97706', soft: 'bg-amber-50 border-amber-100', button: 'bg-amber-600 hover:bg-amber-700', label: 'PAYMENT DETAILS' },
+  { page: 'bg-[#eef4ff]', card: 'bg-white border-indigo-100', text: 'text-slate-900', muted: 'text-slate-500', accent: '#4f46e5', soft: 'bg-indigo-50 border-indigo-100', button: 'bg-indigo-600 hover:bg-indigo-700', label: 'MOBILE PAYMENT' },
+  { page: 'bg-[#f0fdfa]', card: 'bg-white border-teal-100', text: 'text-slate-900', muted: 'text-slate-500', accent: '#0f766e', soft: 'bg-teal-50 border-teal-100', button: 'bg-teal-700 hover:bg-teal-800', label: 'PAY WITH UPI' },
+  { page: 'bg-[#f8fafc]', card: 'bg-white border-slate-200', text: 'text-slate-900', muted: 'text-slate-500', accent: '#334155', soft: 'bg-slate-50 border-slate-200', button: 'bg-slate-900 hover:bg-slate-800', label: 'QUICK SCAN & PAY' },
+  { page: 'bg-[#f7fdf8]', card: 'bg-white border-emerald-100', text: 'text-slate-900', muted: 'text-slate-500', accent: '#16a34a', soft: 'bg-emerald-50 border-emerald-100', button: 'bg-emerald-600 hover:bg-emerald-700', label: 'GUIDED UPI PAYMENT' },
+  { page: 'bg-[#f8f7ff]', card: 'bg-white border-purple-100', text: 'text-slate-900', muted: 'text-slate-500', accent: '#7c3aed', soft: 'bg-purple-50 border-purple-100', button: 'bg-purple-600 hover:bg-purple-700', label: 'MERCHANT CHECKOUT' },
+  { page: 'bg-[#10131f]', card: 'bg-[#181c2c] border-indigo-400/20', text: 'text-white', muted: 'text-slate-400', accent: '#818cf8', soft: 'bg-indigo-400/10 border-indigo-400/20', button: 'bg-indigo-500 hover:bg-indigo-400', label: 'SECURE PAYMENT' }
+];
+
+const GatewayPaymentTemplate: React.FC<TemplateProps & { variant: number }> = ({ data, timeRemaining, isVerifying, onVerifyUtr, variant }) => {
+  const [copied, setCopied] = useState(false);
+  const theme = GATEWAY_THEMES[variant - 1] || GATEWAY_THEMES[0];
+  const minutes = Math.floor(timeRemaining / 60);
+  const seconds = timeRemaining % 60;
+  const isDark = theme.page.includes('#0f') || theme.page.includes('#101');
+  const copyUpi = async () => {
+    await navigator.clipboard.writeText(data.payment_details.upi_id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  };
+
+  return (
+    <div className={`min-h-screen ${theme.page} flex items-center justify-center p-4 font-sans`}>
+      <main className={`w-full max-w-[390px] overflow-hidden rounded-[28px] border ${theme.card} shadow-[0_24px_70px_-32px_rgba(15,23,42,0.45)]`}>
+        <div className={`h-1.5 w-full`} style={{ background: theme.accent }} />
+        <div className="p-5 sm:p-6">
+          <header className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-sm font-extrabold text-white shadow-sm" style={{ background: theme.accent }}>
+                {data.branding.brand_name.charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className={`text-[9px] font-bold tracking-[0.15em] ${theme.muted}`}>{theme.label}</p>
+                <h1 className={`truncate text-sm font-bold ${theme.text}`}>{data.branding.brand_name}</h1>
+              </div>
+            </div>
+            <div className={`shrink-0 rounded-lg border px-2 py-1 text-[10px] font-mono font-bold ${theme.soft}`} style={{ color: theme.accent }}>
+              {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+            </div>
+          </header>
+
+          <section className={`mt-5 rounded-2xl border px-4 py-4 text-center ${theme.soft}`}>
+            <p className={`text-[10px] font-semibold uppercase tracking-[0.12em] ${theme.muted}`}>Amount to pay</p>
+            <p className={`mt-1 font-display text-4xl font-extrabold tracking-tight ${theme.text}`}>₹{data.amount.toFixed(2)}</p>
+            <p className={`mt-1 truncate text-[10px] ${theme.muted}`}>Order #{data.order_id}</p>
+          </section>
+
+          <section className="mt-5 flex flex-col items-center">
+            <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+              {data.payment_details.qr_code_base64 ? <img src={data.payment_details.qr_code_base64} alt="UPI payment QR code" className="h-40 w-40 object-contain" /> : <QrCode className="h-40 w-40 p-5 text-slate-300" />}
+            </div>
+            <p className={`mt-2 text-[11px] ${theme.muted}`}>Scan with any UPI app to pay</p>
+          </section>
+
+          <button onClick={copyUpi} className={`mt-4 flex w-full items-center justify-between rounded-xl border px-3.5 py-3 text-left text-xs transition ${theme.soft}`}>
+            <span className={`min-w-0 truncate font-mono ${theme.text}`}>{data.payment_details.upi_id}</span>
+            <span className="ml-3 shrink-0 font-bold" style={{ color: theme.accent }}>{copied ? 'Copied' : 'Copy UPI'}</span>
+          </button>
+
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            <a href={data.payment_details.intents.gpay} className={`rounded-xl border px-2 py-2.5 text-center text-[10px] font-bold ${theme.card} ${theme.text}`}>Google Pay</a>
+            <a href={data.payment_details.intents.phonepe} className={`rounded-xl border px-2 py-2.5 text-center text-[10px] font-bold ${theme.card} ${theme.text}`}>PhonePe</a>
+            <a href={data.payment_details.intents.paytm} className={`rounded-xl border px-2 py-2.5 text-center text-[10px] font-bold ${theme.card} ${theme.text}`}>Paytm</a>
+          </div>
+
+          <div className="mt-4"><UtrVerifySection onVerify={onVerifyUtr} isVerifying={isVerifying} dark={isDark} /></div>
+        </div>
+        <footer className={`flex items-center justify-center gap-1.5 border-t px-4 py-3 text-[10px] ${theme.muted} ${isDark ? 'border-white/10 bg-black/10' : 'border-slate-100 bg-slate-50/70'}`}>
+          <ShieldCheck className="h-3.5 w-3.5" style={{ color: theme.accent }} /> Secure UPI checkout · Do not refresh while payment is processing
+        </footer>
+      </main>
+    </div>
+  );
+};
+
+// ============================================================================
+// MASTER ROUTER: Resolves any of the 11 payment gateway variants
 // ============================================================================
 export const TemplateRenderer: React.FC<TemplateProps> = (props) => {
   const templateId = props.data.template || 'template_1';
 
   switch (templateId) {
     case 'template_2':
-      return <Template2_MinimalMono {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={2} />;
     case 'template_3':
-      return <Template3_GradientGlass {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={3} />;
     case 'template_4':
-      return <Template4_DarkNeon {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={4} />;
     case 'template_5':
-      return <Template5_Receipt {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={5} />;
     case 'template_6':
-      return <Template6_BoldSplit {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={6} />;
     case 'template_7':
-      return <Template7_SoftPastel {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={7} />;
     case 'template_8':
-      return <Template8_CompactSheet {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={8} />;
     case 'template_9':
-      return <Template9_GuidedSteps {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={9} />;
     case 'template_10':
-      return <Template10_BrandHero {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={10} />;
     case 'template_11':
-      return <Template11_ModernGlass {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={11} />;
     case 'template_1':
     default:
-      return <Template1_ClassicCard {...props} />;
+      return <GatewayPaymentTemplate {...props} variant={1} />;
   }
 };

@@ -357,9 +357,13 @@ class PlanService {
         $stmt->execute([$admin['id']]);
         $merchants = $stmt->fetchAll();
 
-        if (!empty($merchants)) {
-            return $merchants[0];
+        foreach ($merchants as $merchant) {
+            $credentials = json_decode($merchant['credentials_json'] ?? '{}', true) ?: [];
+            if (!empty($credentials['isPlatformBilling'])) return $merchant;
         }
+        // Compatibility fallback for an existing installation. Never use an
+        // account belonging to another tenant as the plan-payment receiver.
+        if (!empty($merchants)) return $merchants[0];
 
         // Fallback: Check if super admin has ANY merchant
         $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? ORDER BY created_at ASC LIMIT 1");
@@ -367,17 +371,8 @@ class PlanService {
         $any = $stmt->fetch();
         if ($any) return $any;
 
-        // Synthetic fallback if super admin hasn't added one yet
-        return [
-            'id' => 'mch_admin_central',
-            'tenant_id' => $admin['id'],
-            'provider' => 'CUSTOM_UPI',
-            'label' => 'PayVia Admin Central Desk',
-            'upi_id' => 'admin@payvia',
-            'display_name' => 'PayVia Official Platform',
-            'status' => 'ACTIVE',
-            'weight' => 10
-        ];
+        // No real merchant account — force admin to add one
+        return null;
     }
 
     public static function createSubscriptionOrder($db, $buyerTenant, $targetPlan) {
@@ -973,6 +968,12 @@ try {
                 exit;
             }
 
+            if (strpos($order['remark1'] ?? '', 'PLAN_PURCHASE:') === 0) {
+                http_response_code(403);
+                echo json_encode(['status' => false, 'error' => 'Subscription orders cannot be force-verified. A captured payment receipt is required.']);
+                exit;
+            }
+
             if (($order['mode'] ?? 'LIVE') === 'LIVE' && !PlanService::isPlanActive($tenant['id'], $db)) {
                 PlanService::logAccess($tenant['id'], 'SETTLEMENT_BLOCKED', $path, 'BLOCKED', 'Active plan required for live order settlement', $db);
                 http_response_code(403);
@@ -1077,7 +1078,33 @@ try {
                 }
             }
 
-            $template = !empty($input['template']) ? $input['template'] : 'template_1';
+            // Resolve the checkout design from the saved payment-page setup.
+            // An explicit API template is accepted only if it is enabled for
+            // this merchant; otherwise fixed/random/rotate is honored.
+            $templateIds = ['template_1', 'template_2', 'template_3', 'template_4', 'template_5', 'template_6', 'template_7', 'template_8', 'template_9', 'template_10', 'template_11'];
+            $settingsStmt = $db->prepare("SELECT template_mode, default_template, enabled_templates FROM tenant_template_settings WHERE tenant_id = ? LIMIT 1");
+            $settingsStmt->execute([$tenant['id']]);
+            $templateSettings = $settingsStmt->fetch() ?: [];
+            $enabledTemplates = json_decode($templateSettings['enabled_templates'] ?? '[]', true);
+            $enabledTemplates = is_array($enabledTemplates) ? array_values(array_intersect($templateIds, $enabledTemplates)) : [];
+            if (empty($enabledTemplates)) $enabledTemplates = $templateIds;
+
+            $requestedTemplate = trim($input['template'] ?? '');
+            if ($requestedTemplate && in_array($requestedTemplate, $enabledTemplates, true)) {
+                $template = $requestedTemplate;
+            } else {
+                $templateMode = $templateSettings['template_mode'] ?? 'fixed';
+                $defaultTemplate = $templateSettings['default_template'] ?? 'template_1';
+                if ($templateMode === 'random') {
+                    $template = $enabledTemplates[array_rand($enabledTemplates)];
+                } elseif ($templateMode === 'rotate') {
+                    $countStmt = $db->prepare("SELECT COUNT(*) FROM orders WHERE tenant_id = ?");
+                    $countStmt->execute([$tenant['id']]);
+                    $template = $enabledTemplates[((int)$countStmt->fetchColumn()) % count($enabledTemplates)];
+                } else {
+                    $template = in_array($defaultTemplate, $enabledTemplates, true) ? $defaultTemplate : $enabledTemplates[0];
+                }
+            }
             $orderId = 'PV_' . strtoupper(bin2hex(random_bytes(5)));
             $linkToken = bin2hex(random_bytes(16));
             $paymentUrl = "https://payvia360.com/pay/$linkToken";
@@ -1185,22 +1212,31 @@ try {
             exit;
         }
 
+        // ── REAL PAYMENT FLOW: Do NOT auto-settle on UTR submission ──────────────
+        // Store UTR as pending review. Super Admin must confirm via Admin Panel
+        // before the plan activates. Auto-settle only happens via Companion App SMS detection.
         $now = gmdate('Y-m-d\TH:i:s\Z');
-        $upd = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
-        $upd->execute([$utr, $now, $now, $order['id']]);
-        $order['status'] = 'TXN_SUCCESS';
-        PlanService::activatePurchasedPlanIfSettled($db, $order);
+        $upd = $db->prepare("UPDATE orders SET status = 'UTR_SUBMITTED', utr = ?, updated_at = ? WHERE id = ? AND status = 'PENDING'");
+        $upd->execute([$utr, $now, $order['id']]);
+
+        PlanService::logAccess(
+            $order['tenant_id'] ?? '',
+            'UTR_SUBMITTED',
+            '/api/public/v1/order/submit-utr',
+            'PENDING',
+            "UTR {$utr} submitted for order {$order['order_id']} — awaiting Super Admin confirmation",
+            $db
+        );
 
         echo json_encode([
             'status' => true,
-            'message' => 'Payment verified successfully! UTR reference confirmed.',
+            'message' => 'UTR reference submitted successfully. Awaiting Super Admin payment confirmation.',
             'data' => [
                 'order_id' => $order['order_id'],
                 'orderId' => $order['order_id'],
-                'status' => 'TXN_SUCCESS',
+                'status' => 'UTR_SUBMITTED',
                 'utr' => $utr,
-                'paidAt' => $now,
-                'paid_at' => $now
+                'pendingReview' => true
             ]
         ]);
         exit;
@@ -1420,17 +1456,17 @@ try {
 
         if ($path === '/api/templates') {
             $templatesList = [
-                ['id' => 'template_1', 'name' => 'Classic Card', 'description' => 'Familiar checkout card. Safe, high-trust default.', 'swatch' => ['#f1f5f9', '#0f172a']],
-                ['id' => 'template_2', 'name' => 'Minimal Mono', 'description' => 'Typography-led, no chrome, fastest to read.', 'swatch' => ['#ffffff', '#111827']],
-                ['id' => 'template_3', 'name' => 'Gradient Glass', 'description' => 'Frosted card on a brand gradient.', 'swatch' => ['#6366f1', '#0f172a']],
-                ['id' => 'template_4', 'name' => 'Dark Neon', 'description' => 'High-contrast dark surface with a glowing ring.', 'swatch' => ['#080b14', '#22d3ee']],
-                ['id' => 'template_5', 'name' => 'Receipt', 'description' => 'Perforated ticket styling with a torn edge.', 'swatch' => ['#f4f1ea', '#b45309']],
-                ['id' => 'template_6', 'name' => 'Bold Split', 'description' => 'Big brand banner with an overlapping QR card.', 'swatch' => ['#2563eb', '#ffffff']],
-                ['id' => 'template_7', 'name' => 'Soft Pastel', 'description' => 'Rounded friendly surfaces, low contrast.', 'swatch' => ['#e0f2fe', '#0ea5e9']],
-                ['id' => 'template_8', 'name' => 'Compact Sheet', 'description' => 'Bottom-sheet layout, thumb-reachable actions.', 'swatch' => ['#0f172a', '#ffffff']],
-                ['id' => 'template_9', 'name' => 'Guided Steps', 'description' => 'Three-step walkthrough for first-time payers.', 'swatch' => ['#f8fafc', '#16a34a']],
-                ['id' => 'template_10', 'name' => 'Brand Hero', 'description' => 'Full-bleed hero with a QR medallion.', 'swatch' => ['#111827', '#a855f7']],
-                ['id' => 'template_11', 'name' => 'Modern Glass', 'description' => 'A cutting-edge glassmorphism design with animated gradients.', 'swatch' => ['#020617', '#6366f1']]
+                ['id' => 'template_1', 'name' => 'UPI Quick Pay', 'description' => 'App-inspired white payment sheet with QR, UPI ID copy and launcher buttons.', 'swatch' => ['#f8fafc', '#2563eb']],
+                ['id' => 'template_2', 'name' => 'Purple Wallet', 'description' => 'Compact, wallet-inspired checkout with a focused amount and direct UPI actions.', 'swatch' => ['#ffffff', '#6d28d9']],
+                ['id' => 'template_3', 'name' => 'Gradient Glass', 'description' => 'Frosted, premium checkout built around your merchant brand colour.', 'swatch' => ['#6366f1', '#0f172a']],
+                ['id' => 'template_4', 'name' => 'Secure Dark', 'description' => 'High-contrast dark mode with a prominent verification status.', 'swatch' => ['#080b14', '#22d3ee']],
+                ['id' => 'template_5', 'name' => 'Payment Receipt', 'description' => 'Invoice-style layout designed for transparent order details.', 'swatch' => ['#f4f1ea', '#b45309']],
+                ['id' => 'template_6', 'name' => 'Mobile Pay Sheet', 'description' => 'Thumb-friendly bottom sheet for mobile browser checkout.', 'swatch' => ['#2563eb', '#ffffff']],
+                ['id' => 'template_7', 'name' => 'Soft Wallet', 'description' => 'Friendly rounded payment surfaces for consumer storefronts.', 'swatch' => ['#e0f2fe', '#0ea5e9']],
+                ['id' => 'template_8', 'name' => 'Quick Scan', 'description' => 'Compact QR-first page for repeat UPI customers.', 'swatch' => ['#0f172a', '#ffffff']],
+                ['id' => 'template_9', 'name' => 'Guided UPI', 'description' => 'Clear three-step payment walkthrough for first-time customers.', 'swatch' => ['#f8fafc', '#16a34a']],
+                ['id' => 'template_10', 'name' => 'Merchant Hero', 'description' => 'Brand-led payment page with a central QR experience.', 'swatch' => ['#111827', '#a855f7']],
+                ['id' => 'template_11', 'name' => 'Modern Glass', 'description' => 'Contemporary glass checkout with instant UPI app routing.', 'swatch' => ['#020617', '#6366f1']]
             ];
 
             echo json_encode([
@@ -1662,12 +1698,24 @@ try {
 
         // E. Ingest Incoming SMS / Notification
         if ($path === '/api/devices/notification-ingest' || $path === '/api/devices/sms-ingest') {
-            $deviceToken = $input['deviceToken'] ?? $input['device_token'] ?? $input['deviceId'] ?? 'companion_phone_1';
+            $deviceToken = $input['deviceToken'] ?? $input['device_token'] ?? $input['deviceId'] ?? '';
+            if (!$deviceToken) {
+                http_response_code(401);
+                echo json_encode(['status' => false, 'error' => 'A paired device token is required for payment receipt ingestion']);
+                exit;
+            }
 
-            // Check if device is paused
-            $chkDev = $db->prepare("SELECT id, status FROM devices WHERE device_token = ? OR id = ? LIMIT 1");
+            // A receipt source must be a previously paired device. Never auto
+            // register an arbitrary caller, since it could falsely settle a
+            // subscription order.
+            $chkDev = $db->prepare("SELECT * FROM devices WHERE device_token = ? OR id = ? LIMIT 1");
             $chkDev->execute([$deviceToken, $deviceToken]);
             $dRow = $chkDev->fetch();
+            if (!$dRow) {
+                http_response_code(401);
+                echo json_encode(['status' => false, 'error' => 'Unrecognized payment-receipt device']);
+                exit;
+            }
             if ($dRow && ($dRow['status'] ?? 'ACTIVE') === 'PAUSED') {
                 echo json_encode([
                     'status' => false,
@@ -1698,36 +1746,39 @@ try {
 
             $matchedOrderId = null;
             if ($amount && $amount > 0) {
-                // Find latest matching pending order around this amount
-                $stmt = $db->prepare("SELECT * FROM orders WHERE status = 'PENDING' AND (amount = ? OR ABS(amount - ?) < 0.01) ORDER BY created_at DESC LIMIT 1");
-                $stmt->execute([$amount, $amount]);
-                $matchedOrder = $stmt->fetch();
+                // A device can only verify payments received by its own
+                // tenant. Submitted UTR gets priority over amount-only match.
+                if ($utr) {
+                    $stmt = $db->prepare("SELECT * FROM orders WHERE tenant_id = ? AND utr = ? AND status IN ('PENDING', 'UTR_SUBMITTED') LIMIT 1");
+                    $stmt->execute([$dRow['tenant_id'], $utr]);
+                    $matchedOrder = $stmt->fetch();
+                } else {
+                    $matchedOrder = false;
+                }
+                if (!$matchedOrder) {
+                    $stmt = $db->prepare("SELECT * FROM orders WHERE tenant_id = ? AND status IN ('PENDING', 'UTR_SUBMITTED') AND (amount = ? OR ABS(amount - ?) < 0.01) ORDER BY created_at DESC LIMIT 1");
+                    $stmt->execute([$dRow['tenant_id'], $amount, $amount]);
+                    $matchedOrder = $stmt->fetch();
+                }
 
                 if ($matchedOrder) {
                     $matchedOrderId = $matchedOrder['order_id'];
                     $now = gmdate('Y-m-d\TH:i:s\Z');
                     $upd = $db->prepare("UPDATE orders SET status = 'TXN_SUCCESS', utr = ?, paid_at = ?, updated_at = ? WHERE id = ?");
                     $upd->execute([$utr ?: 'AUTO_' . substr(bin2hex(random_bytes(4)), 0, 8), $now, $now, $matchedOrder['id']]);
+                    $matchedOrder['status'] = 'TXN_SUCCESS';
+                    PlanService::activatePurchasedPlanIfSettled($db, $matchedOrder);
                 }
             }
 
-            // Ensure device is registered and record real-time battery level
+            // Record real-time status only for the authenticated paired device.
             $batteryLevel = isset($input['batteryLevel']) ? (int)$input['batteryLevel'] : null;
-            $stmt = $db->prepare("SELECT id FROM devices WHERE device_token = ?");
-            $stmt->execute([$deviceToken]);
-            if (!$stmt->fetch()) {
-                $devId = 'dev_' . substr(bin2hex(random_bytes(6)), 0, 8);
-                $bat = $batteryLevel !== null ? $batteryLevel : 100;
-                $ins = $db->prepare("INSERT INTO devices (id, tenant_id, device_name, device_token, pairing_code, battery_level, is_online, last_heartbeat_at, sms_captured_count, created_at) VALUES (?, 'tenant_pankaj_007', 'Android Companion Device', ?, '778899', ?, 1, ?, 1, ?)");
-                $ins->execute([$devId, $deviceToken, $bat, gmdate('Y-m-d\TH:i:s\Z'), gmdate('Y-m-d\TH:i:s\Z')]);
+            if ($batteryLevel !== null) {
+                $upd = $db->prepare("UPDATE devices SET is_online = 1, battery_level = ?, last_heartbeat_at = ?, sms_captured_count = sms_captured_count + 1 WHERE id = ?");
+                $upd->execute([$batteryLevel, gmdate('Y-m-d\TH:i:s\Z'), $dRow['id']]);
             } else {
-                if ($batteryLevel !== null) {
-                    $upd = $db->prepare("UPDATE devices SET is_online = 1, battery_level = ?, last_heartbeat_at = ?, sms_captured_count = sms_captured_count + 1 WHERE device_token = ?");
-                    $upd->execute([$batteryLevel, gmdate('Y-m-d\TH:i:s\Z'), $deviceToken]);
-                } else {
-                    $upd = $db->prepare("UPDATE devices SET is_online = 1, last_heartbeat_at = ?, sms_captured_count = sms_captured_count + 1 WHERE device_token = ?");
-                    $upd->execute([gmdate('Y-m-d\TH:i:s\Z'), $deviceToken]);
-                }
+                $upd = $db->prepare("UPDATE devices SET is_online = 1, last_heartbeat_at = ?, sms_captured_count = sms_captured_count + 1 WHERE id = ?");
+                $upd->execute([gmdate('Y-m-d\TH:i:s\Z'), $dRow['id']]);
             }
 
             echo json_encode([
@@ -1789,6 +1840,12 @@ try {
             if (!$order) {
                 http_response_code(404);
                 echo json_encode(['status' => false, 'error' => 'Order not found for this merchant']);
+                exit;
+            }
+
+            if (strpos($order['remark1'] ?? '', 'PLAN_PURCHASE:') === 0) {
+                http_response_code(403);
+                echo json_encode(['status' => false, 'error' => 'Subscription orders cannot be manually settled. A captured payment receipt is required.']);
                 exit;
             }
 
@@ -2253,30 +2310,6 @@ try {
                 exit;
             }
 
-            // Super Admins don't need to pay for plans
-            if ($tenant['role'] === 'SUPER_ADMIN') {
-                $now = gmdate('Y-m-d\TH:i:s\Z');
-                $validityDays = (int)($targetPlan['validity_days'] ?: 30);
-                $expires = gmdate('Y-m-d\TH:i:s\Z', strtotime("+$validityDays days"));
-                $stmt = $db->prepare("UPDATE tenants SET plan_id = ?, updated_at = ? WHERE id = ?");
-                $stmt->execute([$targetPlan['id'], $now, $tenant['id']]);
-
-                $stmt = $db->prepare("UPDATE subscriptions SET plan_id = ?, status = 'ACTIVE', starts_at = ?, expires_at = ?, orders_today = 0 WHERE tenant_id = ?");
-                $stmt->execute([$targetPlan['id'], $now, $expires, $tenant['id']]);
-
-                echo json_encode([
-                    'status' => true,
-                    'message' => "Super Admin assigned to {$targetPlan['name']} plan directly.",
-                    'data' => [
-                        'orderId' => 'ord_admin_bypass',
-                        'isSettled' => true,
-                        'isPlanActive' => true,
-                        'plan' => $targetPlan
-                    ]
-                ]);
-                exit;
-            }
-
             try {
                 $orderInfo = PlanService::createSubscriptionOrder($db, $tenant, $targetPlan);
                 echo json_encode([
@@ -2319,6 +2352,13 @@ try {
                 exit;
             }
 
+            $parts = explode(':', $order['remark1'] ?? '');
+            if (($parts[0] ?? '') !== 'PLAN_PURCHASE' || ($parts[2] ?? '') !== $tenant['id']) {
+                http_response_code(403);
+                echo json_encode(['status' => false, 'error' => 'This subscription order does not belong to your account']);
+                exit;
+            }
+
             $isSettled = ($order['status'] === 'TXN_SUCCESS');
             if ($isSettled) {
                 PlanService::activatePurchasedPlanIfSettled($db, $order);
@@ -2342,76 +2382,11 @@ try {
             exit;
         }
 
-        // 10.4 Upgrade / Direct Activation (Super Admin Only)
+        // 10.4 Direct upgrades are permanently disabled. All plans, including
+        // Super Admin plans, must go through /purchase and a verified receipt.
         if ($path === '/api/plans/upgrade' && $method === 'POST') {
-            $tenant = authenticateUser();
-            if (!$tenant) {
-                http_response_code(401);
-                echo json_encode(['status' => false, 'error' => 'Unauthorized']);
-                exit;
-            }
-
-            // Only Super Admin can directly bypass payment
-            if ($tenant['role'] !== 'SUPER_ADMIN') {
-                http_response_code(402);
-                echo json_encode([
-                    'status' => false,
-                    'error' => 'PAYMENT_REQUIRED',
-                    'message' => 'Subscription plans require payment. Please use secure checkout to purchase your plan.'
-                ]);
-                exit;
-            }
-
-            $planId = $input['planId'] ?? $input['plan_id'] ?? '';
-            $stmt = $db->prepare("SELECT * FROM plans WHERE id = ? AND is_active = 1");
-            $stmt->execute([$planId]);
-            $targetPlan = $stmt->fetch();
-
-            if (!$targetPlan) {
-                http_response_code(404);
-                echo json_encode(['status' => false, 'error' => 'Selected subscription plan not found']);
-                exit;
-            }
-
-            $now = gmdate('Y-m-d\TH:i:s\Z');
-            $validityDays = (int)($targetPlan['validity_days'] ?: 30);
-            $expires = gmdate('Y-m-d\TH:i:s\Z', strtotime("+$validityDays days"));
-
-            // Update Tenant Plan
-            $stmt = $db->prepare("UPDATE tenants SET plan_id = ?, updated_at = ? WHERE id = ?");
-            $stmt->execute([$targetPlan['id'], $now, $tenant['id']]);
-
-            // Update / Insert Subscription
-            $stmt = $db->prepare("SELECT id FROM subscriptions WHERE tenant_id = ?");
-            $stmt->execute([$tenant['id']]);
-            $existingSub = $stmt->fetch();
-
-            if ($existingSub) {
-                $stmt = $db->prepare("UPDATE subscriptions SET plan_id = ?, status = 'ACTIVE', starts_at = ?, expires_at = ?, orders_today = 0, last_reset_date = ? WHERE tenant_id = ?");
-                $stmt->execute([$targetPlan['id'], $now, $expires, date('Y-m-d'), $tenant['id']]);
-            } else {
-                $subId = 'sub_' . substr(bin2hex(random_bytes(6)), 0, 8);
-                $stmt = $db->prepare("INSERT INTO subscriptions (id, tenant_id, plan_id, status, starts_at, expires_at, orders_today, last_reset_date) VALUES (?, ?, ?, 'ACTIVE', ?, ?, 0, ?)");
-                $stmt->execute([$subId, $tenant['id'], $targetPlan['id'], $now, $expires, date('Y-m-d')]);
-            }
-
-            $targetPlan['features'] = json_decode($targetPlan['features_json'] ?? '[]', true);
-            $targetPlan['price'] = (float)$targetPlan['price'];
-
-            echo json_encode([
-                'status' => true,
-                'message' => "🎉 {$targetPlan['name']} Plan activated successfully! Gateway workspace is now fully unlocked.",
-                'data' => [
-                    'plan' => $targetPlan,
-                    'subscription' => [
-                        'tenantId' => $tenant['id'],
-                        'planId' => $targetPlan['id'],
-                        'status' => 'ACTIVE',
-                        'startsAt' => $now,
-                        'expiresAt' => $expires
-                    ]
-                ]
-            ]);
+            http_response_code(402);
+            echo json_encode(['status' => false, 'error' => 'PAYMENT_REQUIRED', 'message' => 'Direct upgrades are disabled. Create a payment order and wait for receipt verification.']);
             exit;
         }
 
@@ -2497,6 +2472,59 @@ try {
         if (!$tenant || $tenant['role'] !== 'SUPER_ADMIN') {
             http_response_code(403);
             echo json_encode(['status' => false, 'error' => 'Access Denied: Super Admin privileges required.']);
+            exit;
+        }
+
+        // Dedicated, platform-owned UPI receiver for subscription QR codes.
+        if ($path === '/api/admin/billing-account' && $method === 'GET') {
+            $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY created_at ASC");
+            $stmt->execute([$tenant['id']]);
+            $accounts = $stmt->fetchAll();
+            $account = null;
+            foreach ($accounts as $candidate) {
+                $credentials = json_decode($candidate['credentials_json'] ?? '{}', true) ?: [];
+                if (!empty($credentials['isPlatformBilling'])) { $account = $candidate; break; }
+            }
+            if (!$account && !empty($accounts)) $account = $accounts[0];
+            echo json_encode(['status' => true, 'data' => $account ?: null]);
+            exit;
+        }
+
+        if ($path === '/api/admin/billing-account' && ($method === 'PUT' || $method === 'PATCH')) {
+            $upiId = strtolower(trim($input['upiId'] ?? $input['upi_id'] ?? ''));
+            $displayName = trim($input['displayName'] ?? $input['display_name'] ?? 'PayVia Platform');
+            if (!preg_match('/^[a-z0-9._-]{2,256}@[a-z0-9._-]{2,256}$/i', $upiId)) {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'Enter a valid UPI ID, for example business@bank']);
+                exit;
+            }
+            $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? ORDER BY created_at ASC");
+            $stmt->execute([$tenant['id']]);
+            $accounts = $stmt->fetchAll();
+            $account = null;
+            foreach ($accounts as $candidate) {
+                $credentials = json_decode($candidate['credentials_json'] ?? '{}', true) ?: [];
+                $wasPlatformBilling = !empty($credentials['isPlatformBilling']);
+                $credentials['isPlatformBilling'] = false;
+                $clear = $db->prepare("UPDATE merchants SET credentials_json = ? WHERE id = ?");
+                $clear->execute([json_encode($credentials), $candidate['id']]);
+                if (!$account && $wasPlatformBilling) $account = $candidate;
+            }
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            if ($account) {
+                $credentials = json_decode($account['credentials_json'] ?? '{}', true) ?: [];
+                $credentials['isPlatformBilling'] = true;
+                $stmt = $db->prepare("UPDATE merchants SET upi_id = ?, display_name = ?, label = 'Platform subscription collection', status = 'ACTIVE', intent_enabled = 1, credentials_json = ?, updated_at = ? WHERE id = ?");
+                $stmt->execute([$upiId, $displayName, json_encode($credentials), $now, $account['id']]);
+                $account['upi_id'] = $upiId; $account['upiId'] = $upiId; $account['display_name'] = $displayName; $account['displayName'] = $displayName;
+            } else {
+                $id = 'm_platform_' . substr(bin2hex(random_bytes(6)), 0, 8);
+                $credentials = json_encode(['isPlatformBilling' => true]);
+                $stmt = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, 'CUSTOM_UPI', 'Platform subscription collection', ?, ?, 1, 'ACTIVE', 1, 0, ?, 0, ?, ?)");
+                $stmt->execute([$id, $tenant['id'], $upiId, $displayName, $credentials, $now, $now]);
+                $account = ['id' => $id, 'upi_id' => $upiId, 'upiId' => $upiId, 'display_name' => $displayName, 'displayName' => $displayName, 'status' => 'ACTIVE'];
+            }
+            echo json_encode(['status' => true, 'message' => 'Platform subscription receiving account saved', 'data' => $account]);
             exit;
         }
 
@@ -2738,8 +2766,9 @@ try {
                 $params[] = (int)$input['isActive'];
             }
             if (isset($input['planId']) || isset($input['plan'])) {
-                $updates[] = "plan_id = ?";
-                $params[] = $input['planId'] ?? $input['plan'];
+                http_response_code(403);
+                echo json_encode(['status' => false, 'error' => 'Plans cannot be assigned manually. A verified subscription payment is required.']);
+                exit;
             }
             if (isset($input['role'])) {
                 $updates[] = "role = ?";

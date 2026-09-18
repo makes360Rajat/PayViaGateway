@@ -28,11 +28,22 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
   const [isMobileView, setIsMobileView] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState(540);
 
+  const sortTemplates = (items: PaymentTemplateConfig[]) => [...items].sort(
+    (a, b) => Number(a.id.replace('template_', '')) - Number(b.id.replace('template_', ''))
+  );
+
+  // Keep preview aligned when a different card is selected from the catalogue.
+  useEffect(() => {
+    setCurrentTplId(initialTemplateId || 'template_1');
+    setData(null);
+    setTimeRemaining(540);
+  }, [initialTemplateId]);
+
   // Load all templates metadata for the quick switch bar
   useEffect(() => {
     ApiService.getTemplatesList().then((res) => {
       if (res.status && res.data) {
-        setTemplates(res.data);
+        setTemplates(sortTemplates(res.data));
       }
     });
   }, []);
@@ -106,7 +117,11 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
             return (
               <button
                 key={tpl.id}
-                onClick={() => setCurrentTplId(tpl.id)}
+                onClick={() => {
+                  setCurrentTplId(tpl.id);
+                  setData(null);
+                  setTimeRemaining(540);
+                }}
                 title={tpl.name}
                 className={`rounded px-2 py-0.5 font-mono text-xs font-bold transition ${
                   isSelected
@@ -143,6 +158,7 @@ export const TemplatePreview: React.FC<TemplatePreviewProps> = ({
       <div className="flex-1 overflow-auto flex items-center justify-center p-3 sm:p-6 bg-[#0b0b12] bg-[radial-gradient(rgba(139,92,246,0.15)_1px,transparent_1px)] [background-size:24px_24px]">
         <div className={`transition-all duration-300 ${isMobileView ? 'w-full max-w-[420px] rounded-3xl border-4 border-white/10 shadow-[0_20px_60px_-20px_rgba(139,92,246,0.45)] overflow-hidden' : 'w-full max-w-4xl'}`}>
           <TemplateRenderer
+            key={currentTplId}
             data={{
               ...data,
               template: currentTplId

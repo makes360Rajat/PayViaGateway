@@ -46,6 +46,10 @@ export const AdminPanel: React.FC = () => {
   const [orders, setOrders] = useState<any[]>([]);
   const [inquiries, setInquiries] = useState<any[]>([]);
   const [plans, setPlans] = useState<any[]>([]);
+  const [billingAccount, setBillingAccount] = useState<any | null>(null);
+  const [showBillingModal, setShowBillingModal] = useState(false);
+  const [billingUpiId, setBillingUpiId] = useState('');
+  const [billingDisplayName, setBillingDisplayName] = useState('');
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'orders' | 'plans' | 'inquiries'>('overview');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -88,12 +92,13 @@ export const AdminPanel: React.FC = () => {
   const loadAdminData = async () => {
     setIsLoading(true);
     try {
-      const [statsRes, usersRes, ordersRes, contactsRes, plansRes] = await Promise.all([
+      const [statsRes, usersRes, ordersRes, contactsRes, plansRes, billingRes] = await Promise.all([
         ApiService.getAdminStats(),
         ApiService.getAdminUsers(),
         ApiService.getAdminOrders({ limit: 100 }),
         ApiService.getAdminContacts(),
-        ApiService.getAdminPlans()
+        ApiService.getAdminPlans(),
+        ApiService.getAdminBillingAccount()
       ]);
 
       if (statsRes.status) setStats(statsRes.data);
@@ -101,11 +106,29 @@ export const AdminPanel: React.FC = () => {
       if (ordersRes.status) setOrders(ordersRes.data || []);
       if (contactsRes.status) setInquiries(contactsRes.data || []);
       if (plansRes.status) setPlans(plansRes.data || []);
+      if (billingRes.status) {
+        setBillingAccount(billingRes.data || null);
+        setBillingUpiId(billingRes.data?.upiId || '');
+        setBillingDisplayName(billingRes.data?.displayName || '');
+      }
     } catch (e) {
       console.error('Failed loading admin data', e);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const saveBillingAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await ApiService.updateAdminBillingAccount({
+      upiId: billingUpiId,
+      displayName: billingDisplayName,
+      label: 'Platform subscription collection'
+    });
+    if (!res.status) return alert(res.error || 'Unable to save platform receiving account');
+    setBillingAccount(res.data);
+    setShowBillingModal(false);
+    alert('Subscription QR and UPI intents now route to this receiving account.');
   };
 
   useEffect(() => {
@@ -150,15 +173,6 @@ export const AdminPanel: React.FC = () => {
     if (selectedTenant?.id === user.id) {
       setSelectedTenant({ ...selectedTenant, isActive: nextStatus });
     }
-  };
-
-  const handleChangeUserPlan = async (userId: string, newPlanId: string) => {
-    await ApiService.updateAdminUser(userId, { planId: newPlanId });
-    setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan: newPlanId } : u));
-    if (selectedTenant?.id === userId) {
-      setSelectedTenant({ ...selectedTenant, plan: newPlanId });
-    }
-    alert('Tenant subscription plan updated successfully!');
   };
 
   const handleImpersonateTenant = async (tenantId: string) => {
@@ -335,6 +349,13 @@ export const AdminPanel: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowBillingModal(true)}
+            className="rounded-xl px-3.5 py-2 text-xs font-semibold bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/25 transition flex items-center gap-1.5"
+          >
+            <CreditCard className="h-3.5 w-3.5" />
+            <span>{billingAccount ? 'Subscription UPI' : 'Set Subscription UPI'}</span>
+          </button>
           {[
             { id: 'overview', label: 'Overview', icon: TrendingUp },
             { id: 'users', label: 'Merchants & Accounts', icon: Users, count: users.length },
@@ -604,18 +625,8 @@ export const AdminPanel: React.FC = () => {
                           {/* Active Plan & Limits */}
                           <td className="p-4">
                             <div className="space-y-1">
-                              <select
-                                value={u.plan}
-                                onChange={(e) => handleChangeUserPlan(u.id, e.target.value)}
-                                className="rounded-lg bg-slate-900 border border-purple-500/30 text-purple-300 text-[11px] font-semibold px-2 py-1 focus:outline-none focus:border-purple-400"
-                              >
-                                <option value="plan_starter">Starter (₹0)</option>
-                                <option value="plan_growth">Growth Tier (₹999)</option>
-                                <option value="plan_pro">Pro Tier (₹1,499)</option>
-                                <option value="plan_scale">Scale Tier (₹2,999)</option>
-                                <option value="plan_vip">VIP Custom (₹4,999)</option>
-                                <option value="plan_unlimited">Enterprise Unlimited (₹9,999)</option>
-                              </select>
+                              <span className="inline-flex rounded-lg bg-slate-900 border border-purple-500/30 text-purple-300 text-[11px] font-semibold px-2 py-1">{u.plan || 'Pending payment'}</span>
+                              <p className="text-[9px] text-slate-500">Changes after verified payment only</p>
                             </div>
                           </td>
 
@@ -1176,23 +1187,13 @@ export const AdminPanel: React.FC = () => {
             {/* Tab 3: Plan & Limits */}
             {drawerActiveTab === 'plan' && (
               <div className="glass-panel p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/60">
-                <h4 className="text-sm font-bold text-white">Manage Tenant Subscription Plan</h4>
+                <h4 className="text-sm font-bold text-white">Tenant Subscription Plan</h4>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1.5">Assign Subscription Tier</label>
-                    <select
-                      value={selectedTenant.plan}
-                      onChange={(e) => handleChangeUserPlan(selectedTenant.id, e.target.value)}
-                      className="w-full rounded-xl bg-slate-900 border border-purple-500/40 p-3 text-xs text-purple-300 font-bold focus:outline-none"
-                    >
-                      <option value="plan_starter">Starter Tier (₹0/mo - 1 Account, 100 txns/day)</option>
-                      <option value="plan_growth">Growth Tier (₹999/mo - 3 Accounts, 500 txns/day)</option>
-                      <option value="plan_pro">Pro Tier (₹1,499/mo - 5 Accounts, 1000 txns/day)</option>
-                      <option value="plan_scale">Scale Tier (₹2,999/mo - 10 Accounts, 3000 txns/day)</option>
-                      <option value="plan_vip">VIP Custom (₹4,999/mo - 25 Accounts, 10000 txns/day)</option>
-                      <option value="plan_unlimited">Enterprise Unlimited (₹9,999/mo - Unlimited Everything)</option>
-                    </select>
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1.5">Current verified tier</label>
+                    <div className="w-full rounded-xl bg-slate-900 border border-purple-500/40 p-3 text-xs text-purple-300 font-bold">{selectedTenant.plan || 'Pending payment'}</div>
+                    <p className="mt-2 text-[10px] text-amber-300">Plan changes require a verified payment receipt and cannot be assigned here.</p>
                   </div>
 
                   <div>
@@ -1372,6 +1373,32 @@ export const AdminPanel: React.FC = () => {
                   Save & Connect Gateway
                 </button>
               </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showBillingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-md glass-panel p-6 rounded-3xl border border-emerald-500/40 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div>
+                <h3 className="font-bold text-base text-white">Platform Subscription Receiving UPI</h3>
+                <p className="text-[11px] text-emerald-300">All plan QR codes and UPI intents route here.</p>
+              </div>
+              <button onClick={() => setShowBillingModal(false)} className="text-slate-400 hover:text-white">✕</button>
+            </div>
+            <form onSubmit={saveBillingAccount} className="space-y-3 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-400 uppercase text-[10px] mb-1">UPI ID (VPA) *</label>
+                <input required value={billingUpiId} onChange={(e) => setBillingUpiId(e.target.value)} placeholder="business@bank" className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-400 uppercase text-[10px] mb-1">Payee display name *</label>
+                <input required value={billingDisplayName} onChange={(e) => setBillingDisplayName(e.target.value)} placeholder="PayVia Platform" className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white" />
+              </div>
+              <p className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 text-[11px] text-amber-200">Plans activate only after a matching bank/UPI receipt is captured by the Super Admin companion device.</p>
+              <div className="pt-2 flex justify-end gap-2"><button type="button" onClick={() => setShowBillingModal(false)} className="rounded-xl px-4 py-2 text-slate-400">Cancel</button><button type="submit" className="rounded-xl bg-emerald-500 px-5 py-2 font-bold text-black">Save receiving account</button></div>
             </form>
           </div>
         </div>

@@ -329,6 +329,12 @@ router.post('/orders/:id/settle', async (req, res) => {
     if (!order) {
         return res.status(404).json({ status: false, error: 'Order not found for this merchant' });
     }
+    if ((order.remark1 || '').startsWith('PLAN_PURCHASE:')) {
+        return res.status(403).json({
+            status: false,
+            error: 'Subscription orders cannot be manually settled. Submit the payment receipt through SMS/notification capture.'
+        });
+    }
     order.status = 'TXN_SUCCESS';
     order.utr = utr || `MANUAL_${Date.now()}`;
     order.paidAt = new Date().toISOString();

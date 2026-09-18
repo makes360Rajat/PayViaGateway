@@ -7,6 +7,62 @@ const uuid_1 = require("uuid");
 const router = (0, express_1.Router)();
 // Apply Super Admin middleware to all routes
 router.use(auth_1.authenticateToken, auth_1.requireAdmin);
+// The receiving account for subscription payments.  This is deliberately a
+// platform-owned setting rather than a merchant fallback, so every plan QR
+// points to the Super Admin's configured VPA.
+router.get('/billing-account', (_req, res) => {
+    const admin = database_1.db.tenants.find(t => t.role === 'SUPER_ADMIN');
+    if (!admin)
+        return res.status(404).json({ status: false, error: 'Super Admin account not found' });
+    const accounts = database_1.db.merchants.filter(m => m.tenantId === admin.id && m.status === 'ACTIVE');
+    const account = accounts.find(m => m.credentials?.isPlatformBilling === true) || accounts[0] || null;
+    return res.json({ status: true, data: account });
+});
+router.put('/billing-account', (req, res) => {
+    const { upiId, displayName, label, provider = 'CUSTOM_UPI' } = req.body;
+    const cleanUpiId = String(upiId || '').trim().toLowerCase();
+    if (!/^[a-z0-9._-]{2,256}@[a-z0-9._-]{2,256}$/i.test(cleanUpiId)) {
+        return res.status(400).json({ status: false, error: 'Enter a valid UPI ID, for example business@bank' });
+    }
+    const admin = database_1.db.tenants.find(t => t.role === 'SUPER_ADMIN');
+    if (!admin)
+        return res.status(404).json({ status: false, error: 'Super Admin account not found' });
+    const now = new Date().toISOString();
+    const adminAccounts = database_1.db.merchants.filter(m => m.tenantId === admin.id);
+    let account = adminAccounts.find(m => m.credentials?.isPlatformBilling === true) || adminAccounts[0];
+    // Only one platform collection account can be active at a time.
+    adminAccounts.forEach(m => { m.credentials = { ...m.credentials, isPlatformBilling: false }; });
+    if (!account) {
+        account = {
+            id: `m_platform_${(0, uuid_1.v4)().slice(0, 8)}`,
+            tenantId: admin.id,
+            provider: provider,
+            label: String(label || 'Platform subscription collection'),
+            upiId: cleanUpiId,
+            displayName: String(displayName || admin.businessName || 'PayVia Platform'),
+            weight: 1,
+            status: 'ACTIVE',
+            intentEnabled: true,
+            credentials: { isPlatformBilling: true },
+            smsCount: 0,
+            createdAt: now,
+            updatedAt: now
+        };
+        database_1.db.merchants.push(account);
+    }
+    else {
+        account.upiId = cleanUpiId;
+        account.displayName = String(displayName || account.displayName || 'PayVia Platform');
+        account.label = String(label || account.label || 'Platform subscription collection');
+        account.provider = provider;
+        account.status = 'ACTIVE';
+        account.intentEnabled = true;
+        account.credentials = { ...account.credentials, isPlatformBilling: true };
+        account.updatedAt = now;
+    }
+    database_1.db.save();
+    return res.json({ status: true, message: 'Platform subscription receiving UPI account saved', data: account });
+});
 // Platform Overview Metrics
 router.get('/stats', (req, res) => {
     const totalTenants = database_1.db.tenants.length;
@@ -66,7 +122,8 @@ router.get('/users', (req, res) => {
     });
     return res.json({ status: true, data: usersWithStats });
 });
-// Update user status or assign plan manually
+// Update account controls. Subscription plans are changed exclusively by the
+// verified plan-payment flow; an admin dashboard request cannot grant a plan.
 router.put('/users/:id', (req, res) => {
     const { id } = req.params;
     const { planId, isActive, role } = req.body;
@@ -74,8 +131,9 @@ router.put('/users/:id', (req, res) => {
     if (!tenant) {
         return res.status(404).json({ status: false, error: 'User not found' });
     }
-    if (planId)
-        tenant.planId = planId;
+    if (planId !== undefined) {
+        return res.status(403).json({ status: false, error: 'Plans cannot be assigned manually. A verified subscription payment is required.' });
+    }
     if (isActive !== undefined)
         tenant.isActive = isActive;
     if (role)

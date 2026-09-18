@@ -79,7 +79,7 @@ router.post('/register', async (req, res) => {
             defaultTemplate: 'template_1',
             enabledTemplates: [
                 'template_1', 'template_2', 'template_3', 'template_4', 'template_5',
-                'template_6', 'template_7', 'template_8', 'template_9', 'template_10'
+                'template_6', 'template_7', 'template_8', 'template_9', 'template_10', 'template_11'
             ],
             brandName: businessName,
             brandColor: '#6366f1'

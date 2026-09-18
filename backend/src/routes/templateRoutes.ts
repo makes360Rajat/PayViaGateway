@@ -9,16 +9,16 @@ const router = Router();
 export const TEMPLATE_REGISTRY: PaymentTemplateConfig[] = [
   {
     id: 'template_1',
-    name: 'Cyberpunk Dark Glass',
-    description: 'Modern high-converting dark theme with glowing gradients and glassmorphism',
-    category: 'Dark Mode',
+    name: 'UPI Quick Pay',
+    description: 'App-inspired white payment sheet with QR, UPI ID copy and launcher buttons',
+    category: 'UPI Native',
     badge: 'Popular'
   },
   {
     id: 'template_2',
-    name: 'Minimalist Clean White',
-    description: 'Crisp, professional light layout with high contrast typography and clean lines',
-    category: 'Minimal'
+    name: 'Purple Wallet',
+    description: 'Compact wallet-inspired checkout with a focused amount and direct UPI actions',
+    category: 'UPI Native'
   },
   {
     id: 'template_3',
@@ -69,6 +69,12 @@ export const TEMPLATE_REGISTRY: PaymentTemplateConfig[] = [
     description: 'Real-time countdown dial with animated status waves and instant verification spinner',
     category: 'Live Status',
     badge: 'Realtime'
+  },
+  {
+    id: 'template_11',
+    name: 'Modern Glass',
+    description: 'Contemporary glass checkout with instant UPI app routing',
+    category: 'Fintech'
   }
 ];
 

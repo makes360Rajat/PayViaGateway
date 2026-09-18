@@ -140,7 +140,9 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
     pollingTimerRef.current = setInterval(async () => {
       try {
         const res = await ApiService.checkPlanPurchaseStatus(orderId, token);
-        if (res.status && res.data && (res.data.isSettled || res.data.isPlanActive)) {
+        // An existing active subscription must not make a new purchase look
+        // paid. Only the specific order's verified settlement activates it.
+        if (res.status && res.data?.isSettled) {
           stopPolling();
           setPaymentSuccess(true);
           try {
@@ -183,7 +185,7 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
       if (res.status) {
         // Immediate check
         const poll = await ApiService.checkPlanPurchaseStatus(purchaseOrder.orderId, purchaseOrder.linkToken);
-        if (poll.status && poll.data && (poll.data.isSettled || poll.data.isPlanActive)) {
+        if (poll.status && poll.data?.isSettled) {
           stopPolling();
           setPaymentSuccess(true);
           try {
@@ -555,7 +557,7 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
                       className="rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-4 py-2 text-xs font-bold text-emerald-300 hover:bg-emerald-500/30 disabled:opacity-40 transition flex items-center gap-1"
                     >
                       {isSubmittingUtr ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                      <span>Verify</span>
+                      <span>Submit</span>
                     </button>
                   </div>
                   {utrError && (
@@ -569,7 +571,7 @@ export const PlansPricing: React.FC<PlansPricingProps> = ({ onNavigate }) => {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                   </div>
-                  <span>Waiting for Super Admin SMS receipt... Auto-detecting payment</span>
+                  <span>Waiting for a verified Super Admin account receipt...</span>
                 </div>
               </>
             ) : null}

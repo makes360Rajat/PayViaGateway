@@ -45,6 +45,10 @@ export const PaymentPageCustomizer: React.FC<PaymentPageCustomizerProps> = ({ on
   const [logoUrl, setLogoUrl] = useState('');
   const [supportNote, setSupportNote] = useState('');
 
+  const sortTemplates = (items: PaymentTemplateConfig[]) => [...items].sort(
+    (a, b) => Number(a.id.replace('template_', '')) - Number(b.id.replace('template_', ''))
+  );
+
   useEffect(() => {
     Promise.all([
       ApiService.getTemplateSettings(),
@@ -64,7 +68,7 @@ export const PaymentPageCustomizer: React.FC<PaymentPageCustomizerProps> = ({ on
         }
       }
       if (templatesRes.status && templatesRes.data) {
-        setTemplates(templatesRes.data);
+        setTemplates(sortTemplates(templatesRes.data));
       }
       setIsLoading(false);
     });
