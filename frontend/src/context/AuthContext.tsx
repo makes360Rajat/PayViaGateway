@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { UserTenant, Plan, TenantSubscription, PlanEntitlements, PlanUsage } from '../types';
 import { ApiService } from '../services/api';
+import { firebaseAnalytics } from '../lib/firebase';
 
 export interface QuotaUsage {
   ordersToday: number;
@@ -151,6 +152,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsImpersonating(false);
       setImpersonatedBy(null);
 
+      // Firebase Analytics — identify user on login
+      firebaseAnalytics.identify(tenant.id, { role: tenant.role, email: tenant.email });
+      firebaseAnalytics.track(firebaseAnalytics.events.LOGIN, { method: 'email', role: tenant.role });
+
       await refreshProfile();
       return { success: true, user: tenant };
     }
@@ -168,6 +173,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       setToken(res.data.token);
       setUser(tenant);
+
+      // Firebase Analytics — identify new user on registration
+      firebaseAnalytics.identify(tenant?.id, { role: 'MERCHANT', email: tenant?.email });
+      firebaseAnalytics.track(firebaseAnalytics.events.REGISTER, { method: 'email' });
+
       await refreshProfile();
       return { success: true, user: tenant };
     }
