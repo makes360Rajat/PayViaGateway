@@ -91,6 +91,25 @@ export interface PlanEntitlements {
   canCreateTestOrders: boolean;
 }
 
+export interface AccountDailyLimits {
+  dailyAmountLimit?: number; // 0 or undefined = unlimited
+  dailyCountLimit?: number;  // 0 or undefined = unlimited
+  minAmountPerTxn?: number;  // single txn floor
+  maxAmountPerTxn?: number;  // single txn ceiling
+}
+
+export interface AccountDailyStats {
+  usedAmount: number;
+  usedCount: number;
+  dailyAmountLimit?: number;
+  dailyCountLimit?: number;
+  isExhausted: boolean;
+  exhaustedReason?: string;
+  remainingAmount?: number;
+  remainingCount?: number;
+  dateIST: string;
+}
+
 export interface MerchantAccount {
   id: string;
   tenantId: string;
@@ -102,6 +121,8 @@ export interface MerchantAccount {
   status: 'ACTIVE' | 'PAUSED' | 'EXPIRED' | 'ERROR';
   intentEnabled: boolean;
   credentials: Record<string, any>;
+  dailyLimits?: AccountDailyLimits;
+  dailyStats?: AccountDailyStats;
   gmailConnected?: boolean;
   gmailEmail?: string;
   lastUsedAt?: string;

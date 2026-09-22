@@ -512,6 +512,64 @@ class PlanService {
     }
 }
 
+class MerchantLimitService {
+    public static function getTodayISTStartUTC(): string {
+        $todayIST = (new DateTime('now', new DateTimeZone('Asia/Kolkata')))->format('Y-m-d');
+        $dt = new DateTime($todayIST . ' 00:00:00', new DateTimeZone('Asia/Kolkata'));
+        $dt->setTimezone(new DateTimeZone('UTC'));
+        return $dt->format('Y-m-d H:i:s');
+    }
+
+    public static function getTodayISTDateString(): string {
+        return (new DateTime('now', new DateTimeZone('Asia/Kolkata')))->format('Y-m-d');
+    }
+
+    public static function getDailyStats($merchant, $db): array {
+        $credentials = is_array($merchant['credentials'] ?? null) 
+            ? $merchant['credentials'] 
+            : (json_decode($merchant['credentials_json'] ?? '{}', true) ?: []);
+        $limits = $credentials['dailyLimits'] ?? [];
+
+        $dailyAmountLimit = isset($limits['dailyAmountLimit']) ? (float)$limits['dailyAmountLimit'] : 0;
+        $dailyCountLimit = isset($limits['dailyCountLimit']) ? (int)$limits['dailyCountLimit'] : 0;
+        $minAmountPerTxn = isset($limits['minAmountPerTxn']) ? (float)$limits['minAmountPerTxn'] : 0;
+        $maxAmountPerTxn = isset($limits['maxAmountPerTxn']) ? (float)$limits['maxAmountPerTxn'] : 0;
+
+        $startOfDayUTC = self::getTodayISTStartUTC();
+        $stmt = $db->prepare("SELECT COUNT(*) as txn_count, COALESCE(SUM(amount), 0) as total_amount FROM orders WHERE merchant_account_id = ? AND status = 'TXN_SUCCESS' AND created_at >= ?");
+        $stmt->execute([$merchant['id'], $startOfDayUTC]);
+        $row = $stmt->fetch();
+
+        $usedAmount = (float)($row['total_amount'] ?? 0);
+        $usedCount = (int)($row['txn_count'] ?? 0);
+
+        $isExhausted = false;
+        $exhaustedReason = null;
+
+        if ($dailyAmountLimit > 0 && $usedAmount >= $dailyAmountLimit) {
+            $isExhausted = true;
+            $exhaustedReason = "Daily amount limit reached (₹" . number_format($usedAmount, 2) . " / ₹" . number_format($dailyAmountLimit, 2) . ")";
+        } else if ($dailyCountLimit > 0 && $usedCount >= $dailyCountLimit) {
+            $isExhausted = true;
+            $exhaustedReason = "Daily transaction count limit reached ({$usedCount} / {$dailyCountLimit} txns)";
+        }
+
+        return [
+            'usedAmount' => $usedAmount,
+            'usedCount' => $usedCount,
+            'dailyAmountLimit' => $dailyAmountLimit > 0 ? $dailyAmountLimit : null,
+            'dailyCountLimit' => $dailyCountLimit > 0 ? $dailyCountLimit : null,
+            'minAmountPerTxn' => $minAmountPerTxn > 0 ? $minAmountPerTxn : null,
+            'maxAmountPerTxn' => $maxAmountPerTxn > 0 ? $maxAmountPerTxn : null,
+            'isExhausted' => $isExhausted,
+            'exhaustedReason' => $exhaustedReason,
+            'remainingAmount' => $dailyAmountLimit > 0 ? max(0, $dailyAmountLimit - $usedAmount) : null,
+            'remainingCount' => $dailyCountLimit > 0 ? max(0, $dailyCountLimit - $usedCount) : null,
+            'dateIST' => self::getTodayISTDateString()
+        ];
+    }
+}
+
 // -------------------------------------------------------------
 // Router Dispatch
 // -------------------------------------------------------------
@@ -868,7 +926,10 @@ try {
             $merchants = $stmt->fetchAll();
             foreach ($merchants as &$m) {
                 $m['upiId'] = $m['upi_id'] ?? '';
-                $m['credentials'] = json_decode($m['credentials_json'] ?? '{}', true);
+                $creds = json_decode($m['credentials_json'] ?? '{}', true) ?: [];
+                $m['credentials'] = $creds;
+                $m['dailyLimits'] = $creds['dailyLimits'] ?? [];
+                $m['dailyStats'] = MerchantLimitService::getDailyStats($m, $db);
                 $m['intentEnabled'] = (bool)$m['intent_enabled'];
                 $m['gmailConnected'] = (bool)$m['gmail_connected'];
                 $m['displayName'] = $m['display_name'];
@@ -889,7 +950,11 @@ try {
             $displayName = $input['displayName'] ?? $input['display_name'] ?? $label;
             $weight = (int)($input['weight'] ?? 50);
             $intentEnabled = isset($input['intentEnabled']) ? (int)$input['intentEnabled'] : 1;
-            $credsJson = json_encode($input['credentials'] ?? []);
+            $credentials = $input['credentials'] ?? [];
+            if (!empty($input['dailyLimits'])) {
+                $credentials['dailyLimits'] = $input['dailyLimits'];
+            }
+            $credsJson = json_encode($credentials);
             $now = gmdate('Y-m-d\TH:i:s\Z');
 
             $stmt = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', ?, 0, ?, 0, ?, ?)");
@@ -905,14 +970,47 @@ try {
         if ($method === 'PUT' || $method === 'PATCH') {
             $parts = explode('/', $path);
             $merId = end($parts);
-            $status = $input['status'] ?? 'ACTIVE';
+            $status = $input['status'] ?? null;
 
             if ($status === 'ACTIVE') {
                 PlanService::requireActivePlan($tenant['id'], $path, $db);
             }
 
-            $stmt = $db->prepare("UPDATE merchants SET status = ?, updated_at = ? WHERE id = ? AND tenant_id = ?");
-            $stmt->execute([$status, gmdate('Y-m-d\TH:i:s\Z'), $merId, $tenant['id']]);
+            $fields = [];
+            $params = [];
+
+            if ($status !== null) { $fields[] = "status = ?"; $params[] = $status; }
+            if (isset($input['label'])) { $fields[] = "label = ?"; $params[] = $input['label']; }
+            if (isset($input['upiId']) || isset($input['upi_id'])) { $fields[] = "upi_id = ?"; $params[] = $input['upiId'] ?? $input['upi_id']; }
+            if (isset($input['displayName']) || isset($input['display_name'])) { $fields[] = "display_name = ?"; $params[] = $input['displayName'] ?? $input['display_name']; }
+            if (isset($input['weight'])) { $fields[] = "weight = ?"; $params[] = (int)$input['weight']; }
+            if (isset($input['intentEnabled'])) { $fields[] = "intent_enabled = ?"; $params[] = (int)$input['intentEnabled']; }
+
+            if (isset($input['credentials']) || isset($input['dailyLimits'])) {
+                $currStmt = $db->prepare("SELECT credentials_json FROM merchants WHERE id = ? AND tenant_id = ?");
+                $currStmt->execute([$merId, $tenant['id']]);
+                $curr = $currStmt->fetch();
+                $currCreds = json_decode($curr['credentials_json'] ?? '{}', true) ?: [];
+                if (isset($input['credentials']) && is_array($input['credentials'])) {
+                    $currCreds = array_merge($currCreds, $input['credentials']);
+                }
+                if (isset($input['dailyLimits'])) {
+                    $currCreds['dailyLimits'] = $input['dailyLimits'];
+                }
+                $fields[] = "credentials_json = ?";
+                $params[] = json_encode($currCreds);
+            }
+
+            $fields[] = "updated_at = ?";
+            $params[] = gmdate('Y-m-d\TH:i:s\Z');
+            $params[] = $merId;
+            $params[] = $tenant['id'];
+
+            if (!empty($fields)) {
+                $stmt = $db->prepare("UPDATE merchants SET " . implode(', ', $fields) . " WHERE id = ? AND tenant_id = ?");
+                $stmt->execute($params);
+            }
+
             echo json_encode(['status' => true, 'message' => 'Merchant updated']);
             exit;
         }
@@ -1045,36 +1143,93 @@ try {
                     'display_name' => 'PayVia Test Sandbox'
                 ];
             } else {
-                // Active Plan: Pick specified or active merchant for this tenant
+                // Active Plan: Pick specified or active merchant for this tenant with daily limits checking
                 $merchant = null;
                 if (!empty($input['merchantAccountId'])) {
                     $stmt = $db->prepare("SELECT * FROM merchants WHERE id = ? AND tenant_id = ?");
                     $stmt->execute([$input['merchantAccountId'], $tenant['id']]);
-                    $merchant = $stmt->fetch();
+                    $pinned = $stmt->fetch();
+                    if ($pinned) {
+                        $stats = MerchantLimitService::getDailyStats($pinned, $db);
+                        if (!empty($stats['dailyAmountLimit']) && ($stats['usedAmount'] + $amount) > $stats['dailyAmountLimit']) {
+                            http_response_code(429);
+                            echo json_encode([
+                                'status' => false,
+                                'error' => "Pinned merchant account '{$pinned['label']}' has reached its daily limit of ₹" . number_format($stats['dailyAmountLimit'], 2) . " (used: ₹" . number_format($stats['usedAmount'], 2) . "). Limits reset at 00:00 IST."
+                            ]);
+                            exit;
+                        }
+                        if (!empty($stats['dailyCountLimit']) && $stats['usedCount'] >= $stats['dailyCountLimit']) {
+                            http_response_code(429);
+                            echo json_encode([
+                                'status' => false,
+                                'error' => "Pinned merchant account '{$pinned['label']}' has reached its daily transaction limit of {$stats['dailyCountLimit']} transactions. Limits reset at 00:00 IST."
+                            ]);
+                            exit;
+                        }
+                        $merchant = $pinned;
+                    }
                 }
 
                 if (!$merchant) {
-                    $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY weight DESC, RAND() LIMIT 1");
+                    // Query all ACTIVE merchants for this tenant
+                    $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? AND status = 'ACTIVE' ORDER BY weight DESC, created_at ASC");
                     $stmt->execute([$tenant['id']]);
-                    $merchant = $stmt->fetch();
-                }
+                    $activeMerchants = $stmt->fetchAll();
 
-                // If tenant has no merchant account at all, auto-create a primary one
-                if (!$merchant) {
-                    $merchantId = 'mch_' . bin2hex(random_bytes(4));
-                    $merchantUpi = 'merchant@upi';
-                    $merchantLabel = 'Primary UPI Gateway';
-                    $merchantDisplayName = $tenant['business_name'] ?: $tenant['name'] ?: 'PayVia Merchant';
-                    $now = gmdate('Y-m-d\TH:i:s\Z');
-                    $insM = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, 'CUSTOM_UPI', ?, ?, ?, 10, 'ACTIVE', 1, 0, '{}', 0, ?, ?)");
-                    $insM->execute([$merchantId, $tenant['id'], $merchantLabel, $merchantUpi, $merchantDisplayName, $now, $now]);
-                    $merchant = [
-                        'id' => $merchantId,
-                        'label' => $merchantLabel,
-                        'provider' => 'CUSTOM_UPI',
-                        'upi_id' => $merchantUpi,
-                        'display_name' => $merchantDisplayName
-                    ];
+                    // Filter out accounts where daily limits or per-txn limits are exceeded
+                    $eligible = [];
+                    foreach ($activeMerchants as $candidate) {
+                        $stats = MerchantLimitService::getDailyStats($candidate, $db);
+                        if (!empty($stats['minAmountPerTxn']) && $amount < $stats['minAmountPerTxn']) continue;
+                        if (!empty($stats['maxAmountPerTxn']) && $amount > $stats['maxAmountPerTxn']) continue;
+                        if (!empty($stats['dailyAmountLimit']) && ($stats['usedAmount'] + $amount) > $stats['dailyAmountLimit']) continue;
+                        if (!empty($stats['dailyCountLimit']) && $stats['usedCount'] >= $stats['dailyCountLimit']) continue;
+                        $eligible[] = $candidate;
+                    }
+
+                    if (!empty($eligible)) {
+                        // Weighted random selection among non-exhausted eligible accounts
+                        $totalWeight = 0;
+                        foreach ($eligible as $e) {
+                            $totalWeight += max(1, (int)($e['weight'] ?? 1));
+                        }
+                        $rand = rand(1, max(1, $totalWeight));
+                        $currWeight = 0;
+                        foreach ($eligible as $e) {
+                            $currWeight += max(1, (int)($e['weight'] ?? 1));
+                            if ($rand <= $currWeight) {
+                                $merchant = $e;
+                                break;
+                            }
+                        }
+                        if (!$merchant) $merchant = $eligible[0];
+                    } else if (!empty($activeMerchants)) {
+                        http_response_code(429);
+                        echo json_encode([
+                            'status' => false,
+                            'error' => 'All connected UPI accounts have reached their daily processing limit for today. Limits automatically reset at 00:00 IST.'
+                        ]);
+                        exit;
+                    }
+
+                    // If tenant has no merchant account at all, auto-create a primary one
+                    if (!$merchant) {
+                        $merchantId = 'mch_' . bin2hex(random_bytes(4));
+                        $merchantUpi = 'merchant@upi';
+                        $merchantLabel = 'Primary UPI Gateway';
+                        $merchantDisplayName = $tenant['business_name'] ?: $tenant['name'] ?: 'PayVia Merchant';
+                        $now = gmdate('Y-m-d\TH:i:s\Z');
+                        $insM = $db->prepare("INSERT INTO merchants (id, tenant_id, provider, label, upi_id, display_name, weight, status, intent_enabled, gmail_connected, credentials_json, sms_count, created_at, updated_at) VALUES (?, ?, 'CUSTOM_UPI', ?, ?, ?, 10, 'ACTIVE', 1, 0, '{}', 0, ?, ?)");
+                        $insM->execute([$merchantId, $tenant['id'], $merchantLabel, $merchantUpi, $merchantDisplayName, $now, $now]);
+                        $merchant = [
+                            'id' => $merchantId,
+                            'label' => $merchantLabel,
+                            'provider' => 'CUSTOM_UPI',
+                            'upi_id' => $merchantUpi,
+                            'display_name' => $merchantDisplayName
+                        ];
+                    }
                 }
             }
 

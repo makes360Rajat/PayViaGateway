@@ -3,7 +3,65 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RouterEngine = void 0;
 const database_1 = require("../db/database");
 class RouterEngine {
-    static selectMerchantAccount(tenantId, apiKey) {
+    /**
+     * Returns current calendar date in Indian Standard Time (UTC+5:30) as "YYYY-MM-DD"
+     */
+    static getTodayISTDateString(date = new Date()) {
+        const istTime = new Date(date.getTime() + (5.5 * 60 * 60 * 1000));
+        return istTime.toISOString().slice(0, 10);
+    }
+    /**
+     * Calculates live daily usage for a merchant account for the current IST day
+     */
+    static getAccountDailyStats(account) {
+        const todayIST = this.getTodayISTDateString();
+        const limits = account.dailyLimits || account.credentials?.dailyLimits || {};
+        const todayOrders = database_1.db.orders.filter(o => {
+            if (o.merchantAccountId !== account.id)
+                return false;
+            if (o.status !== 'TXN_SUCCESS')
+                return false;
+            if (!o.createdAt)
+                return false;
+            try {
+                const orderDateIST = this.getTodayISTDateString(new Date(o.createdAt));
+                return orderDateIST === todayIST;
+            }
+            catch {
+                return false;
+            }
+        });
+        const usedAmount = todayOrders.reduce((sum, o) => sum + (Number(o.amount) || 0), 0);
+        const usedCount = todayOrders.length;
+        let isExhausted = false;
+        let exhaustedReason;
+        if (limits.dailyAmountLimit && limits.dailyAmountLimit > 0 && usedAmount >= limits.dailyAmountLimit) {
+            isExhausted = true;
+            exhaustedReason = `Daily amount limit reached (₹${usedAmount.toLocaleString('en-IN')} / ₹${limits.dailyAmountLimit.toLocaleString('en-IN')})`;
+        }
+        else if (limits.dailyCountLimit && limits.dailyCountLimit > 0 && usedCount >= limits.dailyCountLimit) {
+            isExhausted = true;
+            exhaustedReason = `Daily transaction limit reached (${usedCount} / ${limits.dailyCountLimit} txns)`;
+        }
+        const remainingAmount = limits.dailyAmountLimit && limits.dailyAmountLimit > 0
+            ? Math.max(0, limits.dailyAmountLimit - usedAmount)
+            : undefined;
+        const remainingCount = limits.dailyCountLimit && limits.dailyCountLimit > 0
+            ? Math.max(0, limits.dailyCountLimit - usedCount)
+            : undefined;
+        return {
+            usedAmount,
+            usedCount,
+            dailyAmountLimit: limits.dailyAmountLimit,
+            dailyCountLimit: limits.dailyCountLimit,
+            isExhausted,
+            exhaustedReason,
+            remainingAmount,
+            remainingCount,
+            dateIST: todayIST
+        };
+    }
+    static selectMerchantAccount(tenantId, amount = 0, apiKey) {
         let candidateAccounts = database_1.db.merchants.filter(m => m.tenantId === tenantId && m.status === 'ACTIVE');
         if (candidateAccounts.length === 0) {
             throw new Error('No active merchant accounts connected. Please connect or resume an account in your dashboard.');
@@ -12,6 +70,14 @@ class RouterEngine {
         if (apiKey && apiKey.scope === 'ACCOUNT' && apiKey.merchantAccountId) {
             const fixedAccount = candidateAccounts.find(m => m.id === apiKey.merchantAccountId);
             if (fixedAccount) {
+                const stats = this.getAccountDailyStats(fixedAccount);
+                const limits = fixedAccount.dailyLimits || fixedAccount.credentials?.dailyLimits || {};
+                if (limits.dailyAmountLimit && limits.dailyAmountLimit > 0 && (stats.usedAmount + amount) > limits.dailyAmountLimit) {
+                    throw new Error(`The pinned merchant account ${fixedAccount.label} has reached its daily limit of ₹${limits.dailyAmountLimit.toLocaleString('en-IN')} (used: ₹${stats.usedAmount.toLocaleString('en-IN')}).`);
+                }
+                if (limits.dailyCountLimit && limits.dailyCountLimit > 0 && stats.usedCount >= limits.dailyCountLimit) {
+                    throw new Error(`The pinned merchant account ${fixedAccount.label} has reached its daily count limit of ${limits.dailyCountLimit} transactions.`);
+                }
                 return fixedAccount;
             }
             throw new Error(`The specific merchant account pinned to this API key is inactive or deleted.`);
@@ -24,7 +90,7 @@ class RouterEngine {
             }
         }
         // 3. FamPay specific rule: must have Gmail connected
-        const validCandidates = candidateAccounts.filter(m => {
+        let validCandidates = candidateAccounts.filter(m => {
             if (m.provider === 'FAMPAY' && !m.gmailConnected) {
                 return false;
             }
@@ -33,8 +99,35 @@ class RouterEngine {
         if (validCandidates.length === 0) {
             throw new Error('All matching merchant accounts are paused or require setup.');
         }
-        // 4. Weighted Random Selection
-        return this.pickWeightedAccount(validCandidates);
+        // 4. Filter candidates based on Daily Limits & Per-Transaction Bounds
+        const eligibleCandidates = validCandidates.filter(acc => {
+            const limits = acc.dailyLimits || acc.credentials?.dailyLimits || {};
+            // Single transaction min/max checks
+            if (limits.minAmountPerTxn && limits.minAmountPerTxn > 0 && amount > 0 && amount < limits.minAmountPerTxn) {
+                return false;
+            }
+            if (limits.maxAmountPerTxn && limits.maxAmountPerTxn > 0 && amount > 0 && amount > limits.maxAmountPerTxn) {
+                return false;
+            }
+            // Live Daily usage check
+            const stats = this.getAccountDailyStats(acc);
+            if (limits.dailyAmountLimit && limits.dailyAmountLimit > 0 && amount > 0) {
+                if ((stats.usedAmount + amount) > limits.dailyAmountLimit) {
+                    return false; // Rotates away!
+                }
+            }
+            if (limits.dailyCountLimit && limits.dailyCountLimit > 0) {
+                if (stats.usedCount >= limits.dailyCountLimit) {
+                    return false; // Rotates away!
+                }
+            }
+            return true;
+        });
+        if (eligibleCandidates.length === 0) {
+            throw new Error('All connected UPI accounts have reached their daily processing limit for today. Limits automatically reset at 00:00 IST.');
+        }
+        // 5. Weighted Random Selection among eligible non-exhausted accounts
+        return this.pickWeightedAccount(eligibleCandidates);
     }
     static pickWeightedAccount(accounts) {
         if (accounts.length === 1)

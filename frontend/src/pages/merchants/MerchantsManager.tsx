@@ -171,6 +171,10 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
   const [editMid, setEditMid] = useState('');
   const [editMerchantKey, setEditMerchantKey] = useState('');
   const [editMobile, setEditMobile] = useState('');
+  const [editDailyAmountLimit, setEditDailyAmountLimit] = useState<string | number>('');
+  const [editDailyCountLimit, setEditDailyCountLimit] = useState<string | number>('');
+  const [editMinAmountPerTxn, setEditMinAmountPerTxn] = useState<string | number>('');
+  const [editMaxAmountPerTxn, setEditMaxAmountPerTxn] = useState<string | number>('');
 
   // Test Live QR Modal State
   const [testQrAccount, setTestQrAccount] = useState<MerchantAccount | null>(null);
@@ -297,17 +301,30 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
     setEditMid(account.credentials?.mid || '');
     setEditMerchantKey(account.credentials?.merchantKey || '');
     setEditMobile(account.credentials?.mobile || '');
+    const limits = account.dailyLimits || account.credentials?.dailyLimits || {};
+    setEditDailyAmountLimit(limits.dailyAmountLimit ?? '');
+    setEditDailyCountLimit(limits.dailyCountLimit ?? '');
+    setEditMinAmountPerTxn(limits.minAmountPerTxn ?? '');
+    setEditMaxAmountPerTxn(limits.maxAmountPerTxn ?? '');
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAccount) return;
 
+    const dailyLimits = {
+      dailyAmountLimit: editDailyAmountLimit !== '' ? Math.max(0, Number(editDailyAmountLimit)) : 0,
+      dailyCountLimit: editDailyCountLimit !== '' ? Math.max(0, Number(editDailyCountLimit)) : 0,
+      minAmountPerTxn: editMinAmountPerTxn !== '' ? Math.max(0, Number(editMinAmountPerTxn)) : 0,
+      maxAmountPerTxn: editMaxAmountPerTxn !== '' ? Math.max(0, Number(editMaxAmountPerTxn)) : 0,
+    };
+
     const credentials = {
       ...editingAccount.credentials,
       mid: editMid,
       merchantKey: editMerchantKey,
-      mobile: editMobile
+      mobile: editMobile,
+      dailyLimits
     };
 
     const res = await ApiService.updateMerchant(editingAccount.id, {
@@ -316,12 +333,13 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
       displayName: editDisplayName,
       weight: Number(editWeight) || 1,
       intentEnabled: editIntentEnabled,
-      credentials
+      credentials,
+      dailyLimits
     });
 
     if (res.status) {
       setEditingAccount(null);
-      showToast(`✓ Updated ${editLabel} settings`);
+      showToast(`✓ Updated ${editLabel} settings & limits`);
       loadMerchants();
     } else {
       showToast(`❌ ${res.error || 'Failed to update merchant'}`);
@@ -776,6 +794,103 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
                         Gmail: <span className="text-amber-300">{account.credentials.gmailEmail}</span>
                       </div>
                     )}
+
+                    {/* Daily Processing Limit & Auto-Rotation Progress Meter */}
+                    {(() => {
+                      const limits = account.dailyLimits || account.credentials?.dailyLimits || {};
+                      const stats = account.dailyStats;
+                      const hasAmountLimit = Boolean(limits.dailyAmountLimit && limits.dailyAmountLimit > 0);
+                      const hasCountLimit = Boolean(limits.dailyCountLimit && limits.dailyCountLimit > 0);
+                      const isExhausted = Boolean(stats?.isExhausted);
+                      const usedAmount = stats?.usedAmount || 0;
+                      const usedCount = stats?.usedCount || 0;
+
+                      const amountPct = hasAmountLimit 
+                        ? Math.min(100, Math.round((usedAmount / limits.dailyAmountLimit!) * 100)) 
+                        : 0;
+                      const countPct = hasCountLimit 
+                        ? Math.min(100, Math.round((usedCount / limits.dailyCountLimit!) * 100)) 
+                        : 0;
+
+                      const progressColor = isExhausted
+                        ? 'from-rose-500 to-red-600'
+                        : (amountPct > 80 || countPct > 80)
+                          ? 'from-amber-500 to-orange-500'
+                          : 'from-emerald-500 to-teal-500';
+
+                      return (
+                        <div className={`mt-3 rounded-2xl p-3 border text-[11px] space-y-2 transition ${
+                          isExhausted
+                            ? 'bg-rose-500/10 border-rose-500/30'
+                            : 'bg-black/30 border-white/5'
+                        }`}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                              <Sliders className="h-3 w-3 text-purple-400" />
+                              <span>Daily Limit (IST)</span>
+                            </span>
+                            {isExhausted ? (
+                              <span className="text-[9px] font-bold text-rose-400 bg-rose-500/20 px-2 py-0.5 rounded-full border border-rose-500/30 animate-pulse">
+                                Rotated · Limit Reached
+                              </span>
+                            ) : (hasAmountLimit || hasCountLimit) ? (
+                              <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded-full border border-emerald-500/25">
+                                Active · Auto-Rotates
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-medium text-slate-500">
+                                Unlimited
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Daily Volume Bar */}
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] mb-1 font-mono">
+                              <span className="text-slate-400">Volume:</span>
+                              <span className={`font-bold ${isExhausted ? 'text-rose-300' : 'text-slate-200'}`}>
+                                ₹{usedAmount.toLocaleString('en-IN')} / {hasAmountLimit ? `₹${limits.dailyAmountLimit!.toLocaleString('en-IN')}` : '∞'}
+                              </span>
+                            </div>
+                            {hasAmountLimit && (
+                              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full bg-gradient-to-r ${progressColor} transition-all duration-500`}
+                                  style={{ width: `${amountPct}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Daily Count Bar */}
+                          <div>
+                            <div className="flex items-center justify-between text-[11px] mb-1 font-mono">
+                              <span className="text-slate-400">Txns:</span>
+                              <span className={`font-bold ${isExhausted ? 'text-rose-300' : 'text-slate-200'}`}>
+                                {usedCount} / {hasCountLimit ? `${limits.dailyCountLimit} txns` : '∞'}
+                              </span>
+                            </div>
+                            {hasCountLimit && (
+                              <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full bg-gradient-to-r ${progressColor} transition-all duration-500`}
+                                  style={{ width: `${countPct}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-white/5">
+                            <span>Resets at 00:00 IST</span>
+                            {(limits.minAmountPerTxn || limits.maxAmountPerTxn) ? (
+                              <span className="text-purple-300 font-mono">
+                                ₹{limits.minAmountPerTxn || 1} - ₹{limits.maxAmountPerTxn || 'Any'}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
 
                   {/* Actions Footer */}
@@ -1093,6 +1208,75 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
                   onChange={(e) => setEditWeight(Number(e.target.value))}
                   className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono"
                 />
+              </div>
+
+              {/* Daily Limits & Smart Auto-Rotation Section */}
+              <div className="pt-3 border-t border-white/10 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-200 flex items-center gap-1.5">
+                    <Sliders className="h-3.5 w-3.5 text-purple-400" />
+                    <span>Daily Limits & Smart Auto-Rotation</span>
+                  </span>
+                  <span className="text-[10px] text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20 font-mono">
+                    Resets 00:00 IST
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  When this account reaches either daily volume or count limit, PayVia Gateway automatically rotates payments to your other accounts. Counters refresh automatically at midnight (00:00 IST).
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Daily Amount Limit (₹)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      placeholder="0 = Unlimited"
+                      value={editDailyAmountLimit}
+                      onChange={(e) => setEditDailyAmountLimit(e.target.value)}
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono placeholder:text-slate-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Daily Txn Count Limit</label>
+                    <input
+                      type="number"
+                      min={0}
+                      placeholder="0 = Unlimited"
+                      value={editDailyCountLimit}
+                      onChange={(e) => setEditDailyCountLimit(e.target.value)}
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono placeholder:text-slate-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-400 mb-1">Min Txn Amount (₹)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="Optional min floor"
+                      value={editMinAmountPerTxn}
+                      onChange={(e) => setEditMinAmountPerTxn(e.target.value)}
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono placeholder:text-slate-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-400 mb-1">Max Txn Amount (₹)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={100}
+                      placeholder="Optional max ceiling"
+                      value={editMaxAmountPerTxn}
+                      onChange={(e) => setEditMaxAmountPerTxn(e.target.value)}
+                      className="w-full rounded-xl bg-slate-900 border border-white/10 px-3 py-2 text-white font-mono placeholder:text-slate-600"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3">

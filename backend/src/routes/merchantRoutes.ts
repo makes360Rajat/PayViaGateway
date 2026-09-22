@@ -4,13 +4,24 @@ import { authenticateToken, AuthenticatedRequest } from '../middleware/auth';
 import { MerchantAccount, PaymentProviderType } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { PlanService } from '../services/planService';
+import { RouterEngine } from '../services/routerEngine';
 
 const router = Router();
 
-// List all merchant accounts for tenant
+// List all merchant accounts for tenant with real-time daily stats
 router.get('/', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
   const tenantId = req.tenant!.id;
-  const accounts = db.merchants.filter(m => m.tenantId === tenantId);
+  const accounts = db.merchants
+    .filter(m => m.tenantId === tenantId)
+    .map(account => {
+      const dailyLimits = account.dailyLimits || account.credentials?.dailyLimits || {};
+      const dailyStats = RouterEngine.getAccountDailyStats(account);
+      return {
+        ...account,
+        dailyLimits,
+        dailyStats
+      };
+    });
   return res.json({ status: true, data: accounts });
 });
 
@@ -47,11 +58,17 @@ router.post('/create', authenticateToken, (req: AuthenticatedRequest, res: Respo
       displayName,
       weight,
       intentEnabled,
-      credentials
+      credentials,
+      dailyLimits
     } = req.body;
 
     if (!provider || !label) {
       return res.status(400).json({ status: false, error: 'Provider and account label are required' });
+    }
+
+    const mergedCredentials = credentials || {};
+    if (dailyLimits) {
+      mergedCredentials.dailyLimits = dailyLimits;
     }
 
     const newAccount: MerchantAccount = {
@@ -64,7 +81,8 @@ router.post('/create', authenticateToken, (req: AuthenticatedRequest, res: Respo
       weight: typeof weight === 'number' ? weight : 1,
       status: 'ACTIVE',
       intentEnabled: intentEnabled !== false,
-      credentials: credentials || {},
+      credentials: mergedCredentials,
+      dailyLimits: dailyLimits || undefined,
       smsCount: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -89,7 +107,7 @@ router.put('/:id', authenticateToken, (req: AuthenticatedRequest, res: Response)
     return res.status(404).json({ status: false, error: 'Merchant account not found' });
   }
 
-  const { label, upiId, displayName, weight, status, intentEnabled, credentials, gmailConnected, gmailEmail } = req.body;
+  const { label, upiId, displayName, weight, status, intentEnabled, credentials, dailyLimits, gmailConnected, gmailEmail } = req.body;
 
   if (label !== undefined) account.label = label;
   if (upiId !== undefined) account.upiId = upiId;
@@ -98,6 +116,10 @@ router.put('/:id', authenticateToken, (req: AuthenticatedRequest, res: Response)
   if (status !== undefined) account.status = status;
   if (intentEnabled !== undefined) account.intentEnabled = intentEnabled;
   if (credentials !== undefined) account.credentials = { ...account.credentials, ...credentials };
+  if (dailyLimits !== undefined) {
+    account.dailyLimits = dailyLimits;
+    account.credentials = { ...account.credentials, dailyLimits };
+  }
   if (gmailConnected !== undefined) account.gmailConnected = gmailConnected;
   if (gmailEmail !== undefined) account.gmailEmail = gmailEmail;
 

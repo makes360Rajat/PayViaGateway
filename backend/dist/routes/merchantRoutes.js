@@ -5,11 +5,22 @@ const database_1 = require("../db/database");
 const auth_1 = require("../middleware/auth");
 const uuid_1 = require("uuid");
 const planService_1 = require("../services/planService");
+const routerEngine_1 = require("../services/routerEngine");
 const router = (0, express_1.Router)();
-// List all merchant accounts for tenant
+// List all merchant accounts for tenant with real-time daily stats
 router.get('/', auth_1.authenticateToken, (req, res) => {
     const tenantId = req.tenant.id;
-    const accounts = database_1.db.merchants.filter(m => m.tenantId === tenantId);
+    const accounts = database_1.db.merchants
+        .filter(m => m.tenantId === tenantId)
+        .map(account => {
+        const dailyLimits = account.dailyLimits || account.credentials?.dailyLimits || {};
+        const dailyStats = routerEngine_1.RouterEngine.getAccountDailyStats(account);
+        return {
+            ...account,
+            dailyLimits,
+            dailyStats
+        };
+    });
     return res.json({ status: true, data: accounts });
 });
 // Create new merchant account
@@ -34,9 +45,13 @@ router.post('/create', auth_1.authenticateToken, (req, res) => {
                 error: `Your current plan limit is ${plan.maxMerchantAccounts} merchant accounts. Upgrade your plan to add more.`
             });
         }
-        const { provider, label, upiId, displayName, weight, intentEnabled, credentials } = req.body;
+        const { provider, label, upiId, displayName, weight, intentEnabled, credentials, dailyLimits } = req.body;
         if (!provider || !label) {
             return res.status(400).json({ status: false, error: 'Provider and account label are required' });
+        }
+        const mergedCredentials = credentials || {};
+        if (dailyLimits) {
+            mergedCredentials.dailyLimits = dailyLimits;
         }
         const newAccount = {
             id: `m_${(0, uuid_1.v4)().slice(0, 8)}`,
@@ -48,7 +63,8 @@ router.post('/create', auth_1.authenticateToken, (req, res) => {
             weight: typeof weight === 'number' ? weight : 1,
             status: 'ACTIVE',
             intentEnabled: intentEnabled !== false,
-            credentials: credentials || {},
+            credentials: mergedCredentials,
+            dailyLimits: dailyLimits || undefined,
             smsCount: 0,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -69,7 +85,7 @@ router.put('/:id', auth_1.authenticateToken, (req, res) => {
     if (!account) {
         return res.status(404).json({ status: false, error: 'Merchant account not found' });
     }
-    const { label, upiId, displayName, weight, status, intentEnabled, credentials, gmailConnected, gmailEmail } = req.body;
+    const { label, upiId, displayName, weight, status, intentEnabled, credentials, dailyLimits, gmailConnected, gmailEmail } = req.body;
     if (label !== undefined)
         account.label = label;
     if (upiId !== undefined)
@@ -84,6 +100,10 @@ router.put('/:id', auth_1.authenticateToken, (req, res) => {
         account.intentEnabled = intentEnabled;
     if (credentials !== undefined)
         account.credentials = { ...account.credentials, ...credentials };
+    if (dailyLimits !== undefined) {
+        account.dailyLimits = dailyLimits;
+        account.credentials = { ...account.credentials, dailyLimits };
+    }
     if (gmailConnected !== undefined)
         account.gmailConnected = gmailConnected;
     if (gmailEmail !== undefined)

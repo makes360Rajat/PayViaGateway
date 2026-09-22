@@ -81,7 +81,7 @@ router.post('/public/v1/order/create', authenticateApiKey, (req: AuthenticatedRe
       provider: 'CUSTOM_UPI' as const,
       upiId: 'test@payvia',
       displayName: 'PayVia Test Sandbox'
-    } : RouterEngine.selectMerchantAccount(tenant.id, apiKey);
+    } : RouterEngine.selectMerchantAccount(tenant.id, parsedAmount, apiKey);
 
     // Resolve Payment Page Template
     const resolvedTemplate = template || RouterEngine.resolveTemplate(tenant.id, apiKey);
@@ -299,7 +299,7 @@ router.post('/create-manual', authenticateToken, (req: AuthenticatedRequest, res
         merchantAccount = db.merchants.find(m => m.id === merchantAccountId && m.tenantId === tenant.id);
       }
       if (!merchantAccount) {
-        merchantAccount = RouterEngine.selectMerchantAccount(tenant.id);
+        merchantAccount = RouterEngine.selectMerchantAccount(tenant.id, Number(amount) || 0);
       }
     }
 
