@@ -3270,10 +3270,19 @@ try {
             exit;
         }
 
-        // 12.10 Admin List & Create Subscription Plans
+        // 12.10 Admin List, Create, Update, Toggle, and Delete Subscription Plans
         if ($path === '/api/admin/plans' && $method === 'GET') {
             $stmt = $db->query("SELECT * FROM plans ORDER BY price ASC");
             $plans = $stmt->fetchAll();
+            foreach ($plans as &$p) {
+                $p['features'] = json_decode($p['features_json'] ?? '[]', true);
+                $p['price'] = (float)$p['price'];
+                $p['maxMerchantAccounts'] = (int)$p['max_merchant_accounts'];
+                $p['maxOrdersPerDay'] = (int)$p['max_orders_per_day'];
+                $p['maxApiKeys'] = (int)$p['max_api_keys'];
+                $p['validityDays'] = (int)$p['validity_days'];
+                $p['isActive'] = (bool)$p['is_active'];
+            }
             echo json_encode(['status' => true, 'data' => $plans]);
             exit;
         }
@@ -3287,17 +3296,121 @@ try {
             $maxKeys = (int)($input['maxApiKeys'] ?? 5);
 
             $planId = 'plan_' . preg_replace('/[^a-z0-9_]/', '_', strtolower($name)) . '_' . substr(bin2hex(random_bytes(3)), 0, 4);
-            $features = json_encode([
-                "Up to $maxMerchants Connected Merchant Accounts",
-                "Up to $maxOrders Orders / Day",
-                "Dedicated Webhooks & Priority Companion",
-                "Zero-Drop Auto Settlement Engine"
-            ]);
+            $features = isset($input['features']) 
+                ? (is_array($input['features']) ? json_encode($input['features']) : $input['features'])
+                : json_encode([
+                    "Up to $maxMerchants Connected Merchant Accounts",
+                    "Up to $maxOrders Orders / Day",
+                    "Dedicated Webhooks & Priority Companion",
+                    "Zero-Drop Auto Settlement Engine"
+                ]);
 
             $stmt = $db->prepare("INSERT INTO plans (id, name, price, max_merchant_accounts, max_orders_per_day, max_api_keys, validity_days, features_json, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)");
             $stmt->execute([$planId, $name, $price, $maxMerchants, $maxOrders, $maxKeys, $validity, $features]);
 
             echo json_encode(['status' => true, 'message' => 'Custom plan created successfully', 'data' => ['id' => $planId, 'name' => $name]]);
+            exit;
+        }
+
+        // Toggle Plan Active / Inactive Status
+        if (preg_match('#^/api/admin/plans/([^/]+)/toggle-status$#', $path, $m) && ($method === 'PATCH' || $method === 'POST')) {
+            $planId = $m[1];
+            $stmt = $db->prepare("SELECT * FROM plans WHERE id = ?");
+            $stmt->execute([$planId]);
+            $plan = $stmt->fetch();
+            if (!$plan) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Plan not found']);
+                exit;
+            }
+
+            $newStatus = $plan['is_active'] ? 0 : 1;
+            $upd = $db->prepare("UPDATE plans SET is_active = ? WHERE id = ?");
+            $upd->execute([$newStatus, $planId]);
+
+            echo json_encode([
+                'status' => true, 
+                'message' => "Plan {$plan['name']} is now " . ($newStatus ? 'ACTIVE' : 'INACTIVE'),
+                'data' => ['id' => $planId, 'isActive' => (bool)$newStatus]
+            ]);
+            exit;
+        }
+
+        // Update Plan Details
+        if (preg_match('#^/api/admin/plans/([^/]+)$#', $path, $m) && ($method === 'PUT' || $method === 'PATCH')) {
+            $planId = $m[1];
+            $stmt = $db->prepare("SELECT * FROM plans WHERE id = ?");
+            $stmt->execute([$planId]);
+            $plan = $stmt->fetch();
+            if (!$plan) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Plan not found']);
+                exit;
+            }
+
+            $updates = [];
+            $params = [];
+
+            if (isset($input['name'])) {
+                $updates[] = "name = ?";
+                $params[] = trim($input['name']);
+            }
+            if (isset($input['price'])) {
+                $updates[] = "price = ?";
+                $params[] = (float)$input['price'];
+            }
+            if (isset($input['validityDays'])) {
+                $updates[] = "validity_days = ?";
+                $params[] = (int)$input['validityDays'];
+            }
+            if (isset($input['maxMerchantAccounts'])) {
+                $updates[] = "max_merchant_accounts = ?";
+                $params[] = (int)$input['maxMerchantAccounts'];
+            }
+            if (isset($input['maxOrdersPerDay'])) {
+                $updates[] = "max_orders_per_day = ?";
+                $params[] = (int)$input['maxOrdersPerDay'];
+            }
+            if (isset($input['maxApiKeys'])) {
+                $updates[] = "max_api_keys = ?";
+                $params[] = (int)$input['maxApiKeys'];
+            }
+            if (isset($input['isActive'])) {
+                $updates[] = "is_active = ?";
+                $params[] = $input['isActive'] ? 1 : 0;
+            }
+            if (isset($input['features'])) {
+                $updates[] = "features_json = ?";
+                $params[] = is_array($input['features']) ? json_encode($input['features']) : $input['features'];
+            }
+
+            if (!empty($updates)) {
+                $params[] = $planId;
+                $sql = "UPDATE plans SET " . implode(', ', $updates) . " WHERE id = ?";
+                $db->prepare($sql)->execute($params);
+            }
+
+            echo json_encode(['status' => true, 'message' => "Plan {$plan['name']} updated successfully"]);
+            exit;
+        }
+
+        // Delete Plan
+        if (preg_match('#^/api/admin/plans/([^/]+)$#', $path, $m) && $method === 'DELETE') {
+            $planId = $m[1];
+            if ($planId === 'plan_free') {
+                http_response_code(400);
+                echo json_encode(['status' => false, 'error' => 'Cannot delete standard Free Plan. You may deactivate it instead.']);
+                exit;
+            }
+
+            // Reassign any tenants on this plan to Free Plan
+            $reassign = $db->prepare("UPDATE tenants SET plan_id = 'plan_free' WHERE plan_id = ?");
+            $reassign->execute([$planId]);
+
+            $del = $db->prepare("DELETE FROM plans WHERE id = ?");
+            $del->execute([$planId]);
+
+            echo json_encode(['status' => true, 'message' => 'Plan deleted successfully. Any affected tenants have been safely moved to Free Plan.']);
             exit;
         }
 

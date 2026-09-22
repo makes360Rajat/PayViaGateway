@@ -80,14 +80,17 @@ export const AdminPanel: React.FC = () => {
   const [newGatewayLabel, setNewGatewayLabel] = useState('');
   const [newGatewayDisplayName, setNewGatewayDisplayName] = useState('');
 
-  // New Subscription Plan Modal
+  // Subscription Plan Modal (Create & Edit)
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingPlanAdmin, setEditingPlanAdmin] = useState<any | null>(null);
   const [planName, setPlanName] = useState('');
-  const [planPrice, setPlanPrice] = useState('1999');
+  const [planPrice, setPlanPrice] = useState('199');
   const [planValidity, setPlanValidity] = useState('30');
-  const [maxMerchants, setMaxMerchants] = useState('10');
-  const [maxOrders, setMaxOrders] = useState('2000');
-  const [maxKeys, setMaxKeys] = useState('5');
+  const [maxMerchants, setMaxMerchants] = useState('5');
+  const [maxOrders, setMaxOrders] = useState('1000');
+  const [maxKeys, setMaxKeys] = useState('3');
+  const [isPlanActive, setIsPlanActive] = useState(true);
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
 
   // Super Admin Plan Approval
   const [selectedPlanForApproval, setSelectedPlanForApproval] = useState('plan_free');
@@ -295,22 +298,102 @@ export const AdminPanel: React.FC = () => {
     loadAdminData();
   };
 
-  const handleCreatePlan = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const res = await ApiService.createAdminPlan({
-      name: planName,
-      price: parseFloat(planPrice),
-      validityDays: parseInt(planValidity),
-      maxMerchantAccounts: parseInt(maxMerchants),
-      maxOrdersPerDay: parseInt(maxOrders),
-      maxApiKeys: parseInt(maxKeys)
-    });
+  const openCreatePlanModal = () => {
+    setEditingPlanAdmin(null);
+    setPlanName('');
+    setPlanPrice('199');
+    setPlanValidity('30');
+    setMaxMerchants('5');
+    setMaxOrders('1000');
+    setMaxKeys('3');
+    setIsPlanActive(true);
+    setShowPlanModal(true);
+  };
 
-    if (res.status) {
-      setShowPlanModal(false);
-      setPlanName('');
-      alert('Custom Plan created successfully!');
-      loadAdminData();
+  const openEditPlanModal = (plan: any) => {
+    setEditingPlanAdmin(plan);
+    setPlanName(plan.name || '');
+    setPlanPrice(String(plan.price ?? 0));
+    setPlanValidity(String(plan.validity_days || plan.validityDays || 30));
+    setMaxMerchants(String(plan.max_merchant_accounts || plan.maxMerchantAccounts || 5));
+    setMaxOrders(String(plan.max_orders_per_day || plan.maxOrdersPerDay || 500));
+    setMaxKeys(String(plan.max_api_keys || plan.maxApiKeys || 3));
+    setIsPlanActive(plan.is_active !== false && plan.isActive !== false);
+    setShowPlanModal(true);
+  };
+
+  const handleSavePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!planName.trim()) {
+      alert('Plan name is required');
+      return;
+    }
+    setIsSavingPlan(true);
+    try {
+      const payload = {
+        name: planName.trim(),
+        price: parseFloat(planPrice) || 0,
+        validityDays: parseInt(planValidity, 10) || 30,
+        maxMerchantAccounts: parseInt(maxMerchants, 10) || 1,
+        maxOrdersPerDay: parseInt(maxOrders, 10) || 100,
+        maxApiKeys: parseInt(maxKeys, 10) || 1,
+        isActive: isPlanActive
+      };
+
+      if (editingPlanAdmin) {
+        const res = await ApiService.updateAdminPlan(editingPlanAdmin.id, payload);
+        if (res.status) {
+          setShowPlanModal(false);
+          setEditingPlanAdmin(null);
+          alert('Plan updated successfully!');
+          loadAdminData();
+        } else {
+          alert(res.error || 'Failed to update plan');
+        }
+      } else {
+        const res = await ApiService.createAdminPlan(payload);
+        if (res.status) {
+          setShowPlanModal(false);
+          alert('Custom Plan created successfully!');
+          loadAdminData();
+        } else {
+          alert(res.error || 'Failed to create plan');
+        }
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error saving plan');
+    } finally {
+      setIsSavingPlan(false);
+    }
+  };
+
+  const handleTogglePlanStatus = async (plan: any) => {
+    try {
+      const res = await ApiService.toggleAdminPlanStatus(plan.id);
+      if (res.status) {
+        loadAdminData();
+      } else {
+        alert(res.error || 'Failed to toggle plan status');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error toggling plan status');
+    }
+  };
+
+  const handleDeletePlan = async (plan: any) => {
+    if (!window.confirm(`Permanently delete plan "${plan.name}" from database? Any merchants on it will safely fallback to the Free Plan.`)) {
+      return;
+    }
+    try {
+      const res = await ApiService.deleteAdminPlan(plan.id);
+      if (res.status) {
+        alert(res.message || 'Plan deleted');
+        loadAdminData();
+      } else {
+        alert(res.error || 'Failed to delete plan');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error deleting plan');
     }
   };
 
@@ -818,12 +901,12 @@ export const AdminPanel: React.FC = () => {
             <div>
               <h3 className="font-bold text-base text-white">Manage Platform Subscription Plans</h3>
               <p className="text-xs text-slate-400 mt-1">
-                Configure account limits, validity, and feature tiers for all merchants under Super Admin.
+                Configure account limits, validity, pricing, and active status for all merchant tiers from local DB.
               </p>
             </div>
             <button
-              onClick={() => setShowPlanModal(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow-glow hover:bg-rose-500 transition"
+              onClick={openCreatePlanModal}
+              className="flex items-center gap-1.5 rounded-xl bg-gradient-primary px-4 py-2 text-xs font-bold text-black shadow-glow hover:brightness-110 active:scale-95 transition"
             >
               <Plus className="h-4 w-4" />
               <span>Create Custom Plan</span>
@@ -831,35 +914,86 @@ export const AdminPanel: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {plans.map((p) => (
-              <div key={p.id} className="glass-panel p-6 rounded-3xl border border-white/10 space-y-4 hover:border-purple-500/40 transition">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-display text-lg font-bold text-white">{p.name}</h4>
-                    <span className="text-xs font-mono text-purple-400">{p.id}</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xl font-bold text-emerald-400 font-mono">₹{p.price}</span>
-                    <span className="text-[10px] text-slate-400 block">/ {p.validity_days || 30} days</span>
-                  </div>
-                </div>
+            {plans.map((p) => {
+              const isActive = p.is_active !== false && p.isActive !== false;
+              const formattedPlanName = p.name?.toLowerCase().endsWith('plan') ? p.name : `${p.name} Plan`;
 
-                <div className="space-y-2 pt-2 border-t border-white/5 text-xs text-slate-300">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Max Gateway Accounts:</span>
-                    <span className="font-bold text-white">{p.max_merchant_accounts || 'Unlimited'}</span>
+              return (
+                <div key={p.id} className={`glass-panel p-6 rounded-3xl border transition flex flex-col justify-between space-y-4 ${
+                  isActive ? 'border-white/10 hover:border-purple-500/40' : 'border-rose-500/30 border-dashed opacity-75'
+                }`}>
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-display text-lg font-bold text-white">{formattedPlanName}</h4>
+                          <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+                            isActive ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                          }`}>
+                            {isActive ? 'ACTIVE' : 'INACTIVE'}
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono text-purple-400 block mt-0.5">{p.id}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xl font-bold text-emerald-400 font-mono">₹{p.price}</span>
+                        <span className="text-[10px] text-slate-400 block">/ {p.validity_days || p.validityDays || 30} days</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-3 mt-3 border-t border-white/5 text-xs text-slate-300">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Max Gateway Accounts:</span>
+                        <span className="font-bold text-white">{p.max_merchant_accounts || p.maxMerchantAccounts || 'Unlimited'}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Max Orders / Day:</span>
+                        <span className="font-bold text-white">{(p.max_orders_per_day || p.maxOrdersPerDay || 0).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">Max API Keys:</span>
+                        <span className="font-bold text-white">{p.max_api_keys || p.maxApiKeys || 5}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Max Orders / Day:</span>
-                    <span className="font-bold text-white">{p.max_orders_per_day || 'Unlimited'}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Max API Keys:</span>
-                    <span className="font-bold text-white">{p.max_api_keys || 5}</span>
+
+                  {/* Actions */}
+                  <div className="pt-3 border-t border-white/5 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => handleTogglePlanStatus(p)}
+                        className={`rounded-xl py-1.5 px-3 text-xs font-bold border transition flex items-center justify-center gap-1.5 ${
+                          isActive
+                            ? 'bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20'
+                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+                        }`}
+                      >
+                        <Power className="h-3.5 w-3.5" />
+                        <span>{isActive ? 'Deactivate' : 'Activate'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => openEditPlanModal(p)}
+                        className="rounded-xl bg-white/5 border border-white/10 py-1.5 px-3 text-xs font-bold text-white hover:bg-white/10 transition flex items-center justify-center gap-1.5"
+                      >
+                        <Edit2 className="h-3.5 w-3.5 text-indigo-400" />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+
+                    {p.id !== 'plan_free' && (
+                      <button
+                        onClick={() => handleDeletePlan(p)}
+                        className="w-full rounded-xl bg-rose-500/10 border border-rose-500/20 py-1.5 px-3 text-xs font-bold text-rose-400 hover:bg-rose-500/20 transition flex items-center justify-center gap-1.5"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        <span>Delete Plan</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -1677,11 +1811,13 @@ export const AdminPanel: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-md glass-panel p-6 rounded-3xl border border-rose-500/30 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <h3 className="font-bold text-base text-white">Create Subscription Plan</h3>
-              <button onClick={() => setShowPlanModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h3 className="font-bold text-base text-white">
+                {editingPlanAdmin ? `Edit Plan: ${editingPlanAdmin.name}` : 'Create Subscription Plan'}
+              </h3>
+              <button onClick={() => { setShowPlanModal(false); setEditingPlanAdmin(null); }} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleCreatePlan} className="space-y-3 text-xs">
+            <form onSubmit={handleSavePlan} className="space-y-3 text-xs">
               <div>
                 <label className="block font-semibold text-slate-400 uppercase text-[10px] mb-1">Plan Name</label>
                 <input
@@ -1745,19 +1881,33 @@ export const AdminPanel: React.FC = () => {
                 </div>
               </div>
 
+              <div className="rounded-xl border border-white/10 bg-slate-900/60 p-3 flex items-center justify-between">
+                <div>
+                  <span className="text-slate-200 font-semibold block">Plan Availability</span>
+                  <span className="text-[10px] text-slate-400 block">Allow merchants to subscribe to this plan</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={isPlanActive}
+                  onChange={(e) => setIsPlanActive(e.target.checked)}
+                  className="rounded border-white/20 bg-slate-900 text-emerald-500 h-4 w-4"
+                />
+              </div>
+
               <div className="pt-3 border-t border-white/10 flex justify-end gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowPlanModal(false)}
+                  onClick={() => { setShowPlanModal(false); setEditingPlanAdmin(null); }}
                   className="rounded-xl px-4 py-2 text-slate-400 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-xl bg-rose-600 px-5 py-2 font-bold text-white shadow-glow hover:bg-rose-500 transition"
+                  disabled={isSavingPlan}
+                  className="rounded-xl bg-gradient-primary px-5 py-2 font-bold text-black shadow-glow hover:brightness-110 active:scale-95 disabled:opacity-50 transition"
                 >
-                  Save Plan
+                  {isSavingPlan ? 'Saving...' : (editingPlanAdmin ? 'Update Plan' : 'Save Plan')}
                 </button>
               </div>
             </form>

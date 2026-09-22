@@ -457,6 +457,25 @@ export class ApiService {
     });
   }
 
+  public static updateAdminPlan(id: string, data: any) {
+    return this.request(`/admin/plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public static toggleAdminPlanStatus(id: string) {
+    return this.request(`/admin/plans/${id}/toggle-status`, {
+      method: 'PATCH'
+    });
+  }
+
+  public static deleteAdminPlan(id: string) {
+    return this.request(`/admin/plans/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   public static getAdminContacts() {
     return this.request('/admin/contacts');
   }

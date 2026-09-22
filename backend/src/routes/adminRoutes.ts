@@ -345,4 +345,44 @@ router.put('/plans/:id', (req: AuthenticatedRequest, res: Response) => {
   return res.json({ status: true, message: 'Plan updated', data: plan });
 });
 
+router.patch('/plans/:id/toggle-status', (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  const plan = db.plans.find(p => p.id === id);
+
+  if (!plan) {
+    return res.status(404).json({ status: false, error: 'Plan not found' });
+  }
+
+  plan.isActive = !plan.isActive;
+  db.save();
+
+  return res.json({
+    status: true,
+    message: `Plan ${plan.name} is now ${plan.isActive ? 'ACTIVE' : 'INACTIVE'}`,
+    data: { id: plan.id, isActive: plan.isActive }
+  });
+});
+
+router.delete('/plans/:id', (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  if (id === 'plan_free') {
+    return res.status(400).json({ status: false, error: 'Cannot delete standard Free Plan. You may deactivate it instead.' });
+  }
+
+  const idx = db.plans.findIndex(p => p.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ status: false, error: 'Plan not found' });
+  }
+
+  // Reassign any tenants on this plan to Free Plan
+  db.tenants.forEach(t => {
+    if (t.planId === id) t.planId = 'plan_free';
+  });
+
+  db.plans.splice(idx, 1);
+  db.save();
+
+  return res.json({ status: true, message: 'Plan deleted successfully. Any affected tenants have been moved to Free Plan.' });
+});
+
 export default router;
