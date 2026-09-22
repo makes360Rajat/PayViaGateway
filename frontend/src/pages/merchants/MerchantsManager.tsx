@@ -312,6 +312,15 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
     e.preventDefault();
     if (!editingAccount) return;
 
+    const trimmedUpiId = editUpiId.trim();
+    const trimmedLabel = editLabel.trim() || editingAccount.label;
+    const trimmedDisplayName = editDisplayName.trim() || trimmedLabel;
+
+    if (!trimmedUpiId) {
+      showToast('❌ Please enter a valid UPI ID (e.g. name@bank)');
+      return;
+    }
+
     const dailyLimits = {
       dailyAmountLimit: editDailyAmountLimit !== '' ? Math.max(0, Number(editDailyAmountLimit)) : 0,
       dailyCountLimit: editDailyCountLimit !== '' ? Math.max(0, Number(editDailyCountLimit)) : 0,
@@ -327,10 +336,12 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
       dailyLimits
     };
 
-    const res = await ApiService.updateMerchant(editingAccount.id, {
-      label: editLabel,
-      upiId: editUpiId,
-      displayName: editDisplayName,
+    const targetId = editingAccount.id;
+
+    const res = await ApiService.updateMerchant(targetId, {
+      label: trimmedLabel,
+      upiId: trimmedUpiId,
+      displayName: trimmedDisplayName,
       weight: Number(editWeight) || 1,
       intentEnabled: editIntentEnabled,
       credentials,
@@ -338,9 +349,22 @@ export const MerchantsManager: React.FC<MerchantsManagerProps> = ({ onNavigate }
     });
 
     if (res.status) {
+      // Optimistically update the UI so the changed UPI ID reflects immediately
+      setMerchants(prev => prev.map(m => m.id === targetId ? {
+        ...m,
+        label: trimmedLabel,
+        upiId: trimmedUpiId,
+        displayName: trimmedDisplayName,
+        weight: Number(editWeight) || 1,
+        intentEnabled: editIntentEnabled,
+        credentials,
+        dailyLimits,
+        ...(res.data || {})
+      } : m));
+
       setEditingAccount(null);
-      showToast(`✓ Updated ${editLabel} settings & limits`);
-      loadMerchants();
+      showToast(`✓ Updated ${trimmedLabel} settings & UPI ID`);
+      await loadMerchants();
     } else {
       showToast(`❌ ${res.error || 'Failed to update merchant'}`);
     }

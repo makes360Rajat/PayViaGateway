@@ -920,7 +920,12 @@ try {
         }
         $db = getDb();
 
-        if ($method === 'GET') {
+        // 5.1 GET ALL MERCHANTS
+        if ($method === 'GET' && ($path === '/api/merchants' || $path === '/api/merchants/')) {
+            header('Cache-Control: no-cache, no-store, must-revalidate');
+            header('Pragma: no-cache');
+            header('Expires: 0');
+
             $stmt = $db->prepare("SELECT * FROM merchants WHERE tenant_id = ? ORDER BY created_at DESC");
             $stmt->execute([$tenant['id']]);
             $merchants = $stmt->fetchAll();
@@ -940,15 +945,45 @@ try {
             exit;
         }
 
-        if ($method === 'POST') {
+        // 5.2 TOGGLE STATUS (POST /api/merchants/{id}/toggle)
+        if (preg_match('#^/api/merchants/([^/]+)/toggle$#', $path, $m) && $method === 'POST') {
+            $merId = $m[1];
+            $stmt = $db->prepare("SELECT * FROM merchants WHERE id = ? AND (tenant_id = ? OR ? = 'SUPER_ADMIN')");
+            $stmt->execute([$merId, $tenant['id'], $tenant['role'] ?? '']);
+            $mer = $stmt->fetch();
+            if (!$mer) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Merchant account not found']);
+                exit;
+            }
+
+            $newStatus = ($mer['status'] === 'ACTIVE') ? 'PAUSED' : 'ACTIVE';
+            if ($newStatus === 'ACTIVE') {
+                PlanService::requireActivePlan($tenant['id'], $path, $db);
+            }
+
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $upd = $db->prepare("UPDATE merchants SET status = ?, updated_at = ? WHERE id = ?");
+            $upd->execute([$newStatus, $now, $merId]);
+
+            echo json_encode([
+                'status' => true,
+                'message' => "Account is now " . strtolower($newStatus),
+                'data' => array_merge($mer, ['status' => $newStatus, 'upiId' => $mer['upi_id'] ?? ''])
+            ]);
+            exit;
+        }
+
+        // 5.3 CREATE MERCHANT (POST /api/merchants or POST /api/merchants/create)
+        if (($path === '/api/merchants' || $path === '/api/merchants/' || $path === '/api/merchants/create') && $method === 'POST') {
             PlanService::requireActivePlan($tenant['id'], '/api/merchants', $db);
 
             $id = 'mer_' . substr(bin2hex(random_bytes(6)), 0, 8);
             $provider = $input['provider'] ?? 'CUSTOM_UPI';
-            $label = $input['label'] ?? 'Main Merchant';
-            $upiId = $input['upiId'] ?? $input['upi_id'] ?? '';
-            $displayName = $input['displayName'] ?? $input['display_name'] ?? $label;
-            $weight = (int)($input['weight'] ?? 50);
+            $label = trim($input['label'] ?? 'Main Merchant');
+            $upiId = trim($input['upiId'] ?? $input['upi_id'] ?? '');
+            $displayName = trim($input['displayName'] ?? $input['display_name'] ?? $label);
+            $weight = (int)($input['weight'] ?? 1);
             $intentEnabled = isset($input['intentEnabled']) ? (int)$input['intentEnabled'] : 1;
             $credentials = $input['credentials'] ?? [];
             if (!empty($input['dailyLimits'])) {
@@ -966,12 +1001,21 @@ try {
             exit;
         }
 
-        // UPDATE / DELETE / TOGGLE
-        if ($method === 'PUT' || $method === 'PATCH') {
-            $parts = explode('/', $path);
-            $merId = end($parts);
-            $status = $input['status'] ?? null;
+        // 5.4 UPDATE MERCHANT DETAILS & UPI ID (PUT /api/merchants/{id} or PATCH /api/merchants/{id})
+        if (preg_match('#^/api/merchants/([^/]+)$#', $path, $m) && ($method === 'PUT' || $method === 'PATCH')) {
+            $merId = $m[1];
 
+            $currStmt = $db->prepare("SELECT * FROM merchants WHERE id = ? AND (tenant_id = ? OR ? = 'SUPER_ADMIN')");
+            $currStmt->execute([$merId, $tenant['id'], $tenant['role'] ?? '']);
+            $curr = $currStmt->fetch();
+
+            if (!$curr) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Merchant account not found']);
+                exit;
+            }
+
+            $status = $input['status'] ?? null;
             if ($status === 'ACTIVE') {
                 PlanService::requireActivePlan($tenant['id'], $path, $db);
             }
@@ -979,17 +1023,32 @@ try {
             $fields = [];
             $params = [];
 
-            if ($status !== null) { $fields[] = "status = ?"; $params[] = $status; }
-            if (isset($input['label'])) { $fields[] = "label = ?"; $params[] = $input['label']; }
-            if (isset($input['upiId']) || isset($input['upi_id'])) { $fields[] = "upi_id = ?"; $params[] = $input['upiId'] ?? $input['upi_id']; }
-            if (isset($input['displayName']) || isset($input['display_name'])) { $fields[] = "display_name = ?"; $params[] = $input['displayName'] ?? $input['display_name']; }
-            if (isset($input['weight'])) { $fields[] = "weight = ?"; $params[] = (int)$input['weight']; }
-            if (isset($input['intentEnabled'])) { $fields[] = "intent_enabled = ?"; $params[] = (int)$input['intentEnabled']; }
+            if ($status !== null) { 
+                $fields[] = "status = ?"; 
+                $params[] = $status; 
+            }
+            if (isset($input['label'])) { 
+                $fields[] = "label = ?"; 
+                $params[] = trim($input['label']); 
+            }
+            if (isset($input['upiId']) || isset($input['upi_id'])) { 
+                $fields[] = "upi_id = ?"; 
+                $params[] = trim($input['upiId'] ?? $input['upi_id']); 
+            }
+            if (isset($input['displayName']) || isset($input['display_name'])) { 
+                $fields[] = "display_name = ?"; 
+                $params[] = trim($input['displayName'] ?? $input['display_name']); 
+            }
+            if (isset($input['weight'])) { 
+                $fields[] = "weight = ?"; 
+                $params[] = max(1, (int)$input['weight']); 
+            }
+            if (isset($input['intentEnabled'])) { 
+                $fields[] = "intent_enabled = ?"; 
+                $params[] = (int)$input['intentEnabled']; 
+            }
 
             if (isset($input['credentials']) || isset($input['dailyLimits'])) {
-                $currStmt = $db->prepare("SELECT credentials_json FROM merchants WHERE id = ? AND tenant_id = ?");
-                $currStmt->execute([$merId, $tenant['id']]);
-                $curr = $currStmt->fetch();
                 $currCreds = json_decode($curr['credentials_json'] ?? '{}', true) ?: [];
                 if (isset($input['credentials']) && is_array($input['credentials'])) {
                     $currCreds = array_merge($currCreds, $input['credentials']);
@@ -1004,22 +1063,39 @@ try {
             $fields[] = "updated_at = ?";
             $params[] = gmdate('Y-m-d\TH:i:s\Z');
             $params[] = $merId;
-            $params[] = $tenant['id'];
 
             if (!empty($fields)) {
-                $stmt = $db->prepare("UPDATE merchants SET " . implode(', ', $fields) . " WHERE id = ? AND tenant_id = ?");
+                $stmt = $db->prepare("UPDATE merchants SET " . implode(', ', $fields) . " WHERE id = ?");
                 $stmt->execute($params);
             }
 
-            echo json_encode(['status' => true, 'message' => 'Merchant updated']);
+            // Return fresh updated merchant object
+            $refetchedStmt = $db->prepare("SELECT * FROM merchants WHERE id = ?");
+            $refetchedStmt->execute([$merId]);
+            $updatedMer = $refetchedStmt->fetch();
+            if ($updatedMer) {
+                $updatedMer['upiId'] = $updatedMer['upi_id'] ?? '';
+                $creds = json_decode($updatedMer['credentials_json'] ?? '{}', true) ?: [];
+                $updatedMer['credentials'] = $creds;
+                $updatedMer['dailyLimits'] = $creds['dailyLimits'] ?? [];
+                $updatedMer['dailyStats'] = MerchantLimitService::getDailyStats($updatedMer, $db);
+                $updatedMer['intentEnabled'] = (bool)$updatedMer['intent_enabled'];
+                $updatedMer['displayName'] = $updatedMer['display_name'];
+            }
+
+            echo json_encode([
+                'status' => true,
+                'message' => 'Merchant updated successfully',
+                'data' => $updatedMer
+            ]);
             exit;
         }
 
-        if ($method === 'DELETE') {
-            $parts = explode('/', $path);
-            $merId = end($parts);
-            $stmt = $db->prepare("DELETE FROM merchants WHERE id = ? AND tenant_id = ?");
-            $stmt->execute([$merId, $tenant['id']]);
+        // 5.5 DELETE MERCHANT (DELETE /api/merchants/{id})
+        if (preg_match('#^/api/merchants/([^/]+)$#', $path, $m) && $method === 'DELETE') {
+            $merId = $m[1];
+            $stmt = $db->prepare("DELETE FROM merchants WHERE id = ? AND (tenant_id = ? OR ? = 'SUPER_ADMIN')");
+            $stmt->execute([$merId, $tenant['id'], $tenant['role'] ?? '']);
             echo json_encode(['status' => true, 'message' => 'Merchant removed']);
             exit;
         }

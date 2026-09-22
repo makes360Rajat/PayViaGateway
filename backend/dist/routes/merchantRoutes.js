@@ -80,20 +80,21 @@ router.post('/create', auth_1.authenticateToken, (req, res) => {
 // Update merchant account
 router.put('/:id', auth_1.authenticateToken, (req, res) => {
     const tenantId = req.tenant.id;
+    const isSuperAdmin = req.tenant?.role === 'SUPER_ADMIN';
     const { id } = req.params;
-    const account = database_1.db.merchants.find(m => m.id === id && m.tenantId === tenantId);
+    const account = database_1.db.merchants.find(m => m.id === id && (m.tenantId === tenantId || isSuperAdmin));
     if (!account) {
         return res.status(404).json({ status: false, error: 'Merchant account not found' });
     }
     const { label, upiId, displayName, weight, status, intentEnabled, credentials, dailyLimits, gmailConnected, gmailEmail } = req.body;
     if (label !== undefined)
-        account.label = label;
+        account.label = typeof label === 'string' ? label.trim() : label;
     if (upiId !== undefined)
-        account.upiId = upiId;
+        account.upiId = typeof upiId === 'string' ? upiId.trim() : upiId;
     if (displayName !== undefined)
-        account.displayName = displayName;
+        account.displayName = typeof displayName === 'string' ? displayName.trim() : displayName;
     if (weight !== undefined)
-        account.weight = weight;
+        account.weight = Number(weight) || 1;
     if (status !== undefined)
         account.status = status;
     if (intentEnabled !== undefined)
@@ -115,8 +116,9 @@ router.put('/:id', auth_1.authenticateToken, (req, res) => {
 // Toggle status (Active / Paused)
 router.post('/:id/toggle', auth_1.authenticateToken, (req, res) => {
     const tenantId = req.tenant.id;
+    const isSuperAdmin = req.tenant?.role === 'SUPER_ADMIN';
     const { id } = req.params;
-    const account = database_1.db.merchants.find(m => m.id === id && m.tenantId === tenantId);
+    const account = database_1.db.merchants.find(m => m.id === id && (m.tenantId === tenantId || isSuperAdmin));
     if (!account) {
         return res.status(404).json({ status: false, error: 'Merchant account not found' });
     }
@@ -128,8 +130,9 @@ router.post('/:id/toggle', auth_1.authenticateToken, (req, res) => {
 // Delete merchant account
 router.delete('/:id', auth_1.authenticateToken, (req, res) => {
     const tenantId = req.tenant.id;
+    const isSuperAdmin = req.tenant?.role === 'SUPER_ADMIN';
     const { id } = req.params;
-    const index = database_1.db.merchants.findIndex(m => m.id === id && m.tenantId === tenantId);
+    const index = database_1.db.merchants.findIndex(m => m.id === id && (m.tenantId === tenantId || isSuperAdmin));
     if (index === -1) {
         return res.status(404).json({ status: false, error: 'Merchant account not found' });
     }

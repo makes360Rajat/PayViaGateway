@@ -181,7 +181,7 @@ export class ApiService {
 
   // Merchants
   public static getMerchants() {
-    return this.request('/merchants');
+    return this.request(`/merchants?_t=${Date.now()}`);
   }
 
   public static createMerchant(data: any) {
