@@ -74,12 +74,17 @@ if [ -f "$ROOT_DIR/frontend/public/.htaccess" ]; then
   cp "$ROOT_DIR/frontend/public/.htaccess" "$DIST_DIR/.htaccess"
 fi
 
-# 5. Create Zip Archive for Hostinger File Manager Upload
-echo "\n📦 [4/4] Creating payvia360-deploy.zip..."
+# 5. Create Zip Archives for Hostinger File Manager Upload
+echo "\n📦 [4/4] Creating deployment zip packages..."
 cd "$DIST_DIR"
 zip -r "$ROOT_DIR/payvia360-deploy.zip" ./* .htaccess
 
+# Also create direct public_html zip (extracts directly into public_html without nested folder)
+cd "$DIST_DIR/public_html"
+zip -r "$ROOT_DIR/payvia360-public_html.zip" ./* .htaccess
+
 echo "\n=========================================================="
-echo "✅ Build Complete! Deployment archive ready:"
-echo "📁 $ROOT_DIR/payvia360-deploy.zip"
+echo "✅ Build Complete! Deployment archives ready:"
+echo "📁 Full Bundle: $ROOT_DIR/payvia360-deploy.zip"
+echo "📁 Direct public_html: $ROOT_DIR/payvia360-public_html.zip"
 echo "=========================================================="
