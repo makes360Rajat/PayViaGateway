@@ -89,6 +89,10 @@ export const AdminPanel: React.FC = () => {
   const [maxOrders, setMaxOrders] = useState('2000');
   const [maxKeys, setMaxKeys] = useState('5');
 
+  // Super Admin Plan Approval
+  const [selectedPlanForApproval, setSelectedPlanForApproval] = useState('plan_free');
+  const [isApprovingPlan, setIsApprovingPlan] = useState(false);
+
   const loadAdminData = async () => {
     setIsLoading(true);
     try {
@@ -172,6 +176,28 @@ export const AdminPanel: React.FC = () => {
     setUsers(prev => prev.map(u => u.id === user.id ? { ...u, isActive: nextStatus } : u));
     if (selectedTenant?.id === user.id) {
       setSelectedTenant({ ...selectedTenant, isActive: nextStatus });
+    }
+  };
+
+  const handleApprovePlan = async (tenantId: string, planId: string = 'plan_free') => {
+    try {
+      setIsApprovingPlan(true);
+      const res = await ApiService.approveAdminTenantPlan(tenantId, planId);
+      if (res.status) {
+        alert(res.message || '✓ Merchant approved successfully without payment!');
+        const planNameResult = res.data?.planName || 'Free Plan';
+        setUsers(prev => prev.map(u => u.id === tenantId ? { ...u, plan: planNameResult, isActive: true } : u));
+        if (selectedTenant && selectedTenant.id === tenantId) {
+          setSelectedTenant({ ...selectedTenant, plan: planNameResult, isActive: true });
+        }
+        await loadAdminData();
+      } else {
+        alert(res.error || 'Failed to approve plan');
+      }
+    } catch (e: any) {
+      alert(e.message || 'Error approving plan');
+    } finally {
+      setIsApprovingPlan(false);
     }
   };
 
@@ -624,9 +650,27 @@ export const AdminPanel: React.FC = () => {
 
                           {/* Active Plan & Limits */}
                           <td className="p-4">
-                            <div className="space-y-1">
-                              <span className="inline-flex rounded-lg bg-slate-900 border border-purple-500/30 text-purple-300 text-[11px] font-semibold px-2 py-1">{u.plan || 'Pending payment'}</span>
-                              <p className="text-[9px] text-slate-500">Changes after verified payment only</p>
+                            <div className="space-y-1.5">
+                              <span className={`inline-flex rounded-lg border text-[11px] font-semibold px-2 py-0.5 ${
+                                u.plan && u.plan !== 'Pending payment'
+                                  ? 'bg-purple-950/40 border-purple-500/40 text-purple-300'
+                                  : 'bg-amber-950/40 border-amber-500/30 text-amber-300'
+                              }`}>
+                                {u.plan || 'Pending payment'}
+                              </span>
+                              {!isSuperAdmin && (!u.plan || u.plan === 'Pending payment' || u.plan === 'Free') && (
+                                <div>
+                                  <button
+                                    onClick={() => handleApprovePlan(u.id, 'plan_free')}
+                                    disabled={isApprovingPlan}
+                                    className="inline-flex items-center gap-1 text-[10px] font-bold text-purple-300 hover:text-purple-200 bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 px-2 py-0.5 rounded transition shadow-sm disabled:opacity-50"
+                                    title="Approve Free Plan without payment (₹0 / 365 Days)"
+                                  >
+                                    <Sparkles className="h-2.5 w-2.5 text-purple-400" />
+                                    <span>Approve Free Plan</span>
+                                  </button>
+                                </div>
+                              )}
                             </div>
                           </td>
 
@@ -651,7 +695,7 @@ export const AdminPanel: React.FC = () => {
                             <button
                               onClick={() => openTenantInspection(u)}
                               className="rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-600/50 px-2.5 py-1 text-[11px] font-semibold transition inline-flex items-center gap-1"
-                              title="Inspect All Accounts & Devices"
+                              title="Inspect All Accounts, Gateways & Devices"
                             >
                               <Eye className="h-3 w-3" />
                               <span>Inspect & Control</span>
@@ -669,11 +713,15 @@ export const AdminPanel: React.FC = () => {
                             {!isSuperAdmin && (
                               <button
                                 onClick={() => handleToggleUser(u)}
-                                className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
-                                  u.isActive ? 'bg-slate-800 text-slate-300 hover:bg-rose-900/50 hover:text-rose-200' : 'bg-emerald-600 text-white hover:bg-emerald-500'
+                                className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold transition inline-flex items-center gap-1 ${
+                                  u.isActive 
+                                    ? 'bg-slate-800 border border-slate-700 text-slate-300 hover:bg-rose-900/50 hover:text-rose-200' 
+                                    : 'bg-emerald-600 border border-emerald-500 text-white hover:bg-emerald-500 shadow-glow'
                                 }`}
+                                title={u.isActive ? "Suspend merchant workspace" : "Activate merchant workspace"}
                               >
-                                {u.isActive ? 'Suspend' : 'Activate'}
+                                <Power className="h-3 w-3" />
+                                <span>{u.isActive ? 'Suspend' : 'Activate'}</span>
                               </button>
                             )}
                           </td>
@@ -1091,23 +1139,31 @@ export const AdminPanel: React.FC = () => {
                             <span className="rounded-lg bg-purple-500/20 border border-purple-500/40 px-2 py-0.5 text-[10px] font-mono font-bold text-purple-300">
                               {m.provider}
                             </span>
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.2 text-[9px] font-bold ${
-                              m.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-700 text-slate-400'
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${
+                              m.status === 'ACTIVE' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-rose-500/20 text-rose-300 border border-rose-500/40'
                             }`}>
-                              {m.status}
+                              <span className={`h-1.5 w-1.5 rounded-full ${m.status === 'ACTIVE' ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                              <span>{m.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE'}</span>
                             </span>
                           </div>
                           
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1.5">
                             <button
                               onClick={() => handleToggleMerchantGateway(m.id, m.status)}
-                              className="text-xs text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800"
+                              className={`text-xs px-2.5 py-1 rounded-lg font-semibold transition inline-flex items-center gap-1 ${
+                                m.status === 'ACTIVE'
+                                  ? 'bg-rose-600/20 text-rose-300 hover:bg-rose-600/40 border border-rose-500/30'
+                                  : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-glow'
+                              }`}
+                              title={m.status === 'ACTIVE' ? 'Deactivate this gateway' : 'Activate this gateway'}
                             >
-                              {m.status === 'ACTIVE' ? 'Disable' : 'Enable'}
+                              <Power className="h-3 w-3" />
+                              <span>{m.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
                             </button>
                             <button
                               onClick={() => handleDeleteMerchantGateway(m.id)}
-                              className="text-rose-400 hover:text-rose-300 p-1"
+                              className="text-slate-400 hover:text-rose-300 p-1.5 rounded-lg hover:bg-rose-500/10 transition"
+                              title="Delete gateway account"
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
@@ -1186,31 +1242,121 @@ export const AdminPanel: React.FC = () => {
 
             {/* Tab 3: Plan & Limits */}
             {drawerActiveTab === 'plan' && (
-              <div className="glass-panel p-6 rounded-2xl border border-white/5 space-y-4 bg-slate-900/60">
-                <h4 className="text-sm font-bold text-white">Tenant Subscription Plan</h4>
+              <div className="glass-panel p-6 rounded-2xl border border-white/5 space-y-6 bg-slate-900/60">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-white">Merchant Subscription & Access Control</h4>
+                    <p className="text-xs text-slate-400">Super Admin master authority: approve free plan without payment, assign plans, and toggle operational status.</p>
+                  </div>
+                  <span className="rounded-full bg-purple-500/20 border border-purple-500/40 text-purple-300 text-[10px] font-bold px-2.5 py-1 uppercase tracking-wider">
+                    Super Admin Only
+                  </span>
+                </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1.5">Current verified tier</label>
-                    <div className="w-full rounded-xl bg-slate-900 border border-purple-500/40 p-3 text-xs text-purple-300 font-bold">{selectedTenant.plan || 'Pending payment'}</div>
-                    <p className="mt-2 text-[10px] text-amber-300">Plan changes require a verified payment receipt and cannot be assigned here.</p>
+                  {/* Current Active Plan */}
+                  <div className="rounded-xl bg-slate-950/80 border border-white/10 p-4 space-y-2">
+                    <label className="text-[11px] font-semibold text-slate-400 uppercase block">Current Active Tier</label>
+                    <div className="text-base font-bold text-purple-300 font-mono">
+                      {selectedTenant.plan || 'Pending payment'}
+                    </div>
+                    <div className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <span>Workspace Status:</span>
+                      <span className={`font-bold inline-flex items-center gap-1 ${selectedTenant.isActive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${selectedTenant.isActive ? 'bg-emerald-400' : 'bg-rose-400'}`}></span>
+                        {selectedTenant.isActive ? 'ACTIVE' : 'SUSPENDED'}
+                      </span>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="text-[11px] font-semibold text-slate-400 uppercase block mb-1.5">Tenant Operational Status</label>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => handleToggleUser(selectedTenant)}
-                        className={`px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 ${
-                          selectedTenant.isActive
-                            ? 'bg-rose-600/30 border border-rose-500/40 text-rose-300 hover:bg-rose-600/50'
-                            : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-glow'
-                        }`}
-                      >
-                        <Power className="h-4 w-4" />
-                        <span>{selectedTenant.isActive ? 'Suspend Merchant Workspace' : 'Activate Merchant Workspace'}</span>
-                      </button>
+                  {/* Tenant Workspace Operational Control */}
+                  <div className="rounded-xl bg-slate-950/80 border border-white/10 p-4 space-y-2 flex flex-col justify-between">
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-400 uppercase block">Workspace Operational Status</label>
+                      <p className="text-[11px] text-slate-400">
+                        {selectedTenant.isActive ? 'Merchant is ACTIVE and can receive customer payments.' : 'Merchant is SUSPENDED and cannot receive payments.'}
+                      </p>
                     </div>
+                    <button
+                      onClick={() => handleToggleUser(selectedTenant)}
+                      className={`w-full py-2.5 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 ${
+                        selectedTenant.isActive
+                          ? 'bg-rose-600/20 border border-rose-500/40 text-rose-300 hover:bg-rose-600/40'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-500 shadow-glow'
+                      }`}
+                    >
+                      <Power className="h-4 w-4" />
+                      <span>{selectedTenant.isActive ? 'Suspend Merchant Workspace' : 'Activate Merchant Workspace'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Super Admin Plan Approval Box (Zero Payment) */}
+                <div className="rounded-2xl bg-purple-950/30 border border-purple-500/30 p-5 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center shrink-0">
+                      <Sparkles className="h-5 w-5 text-purple-400" />
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-bold text-white">Approve Merchant Without Payment (Free Plan / Instant Approval)</h5>
+                      <p className="text-xs text-slate-300 mt-1">
+                        Super Admin can bypass payment verification and grant full access to this merchant under the Free Plan (₹0 / 365 Days) or any selected subscription tier.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center pt-2">
+                    <div className="flex-1">
+                      <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Select Subscription Plan</label>
+                      <select
+                        value={selectedPlanForApproval}
+                        onChange={(e) => setSelectedPlanForApproval(e.target.value)}
+                        className="w-full rounded-xl bg-slate-900 border border-purple-500/30 px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-400"
+                      >
+                        <option value="plan_free">Free Plan (₹0 / 365 Days / 500 Orders Daily)</option>
+                        {plans.filter(p => p.id !== 'plan_free').map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} (₹{p.price} / {p.validity_days || p.validityDays} days)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex gap-2 items-end">
+                      <button
+                        onClick={() => handleApprovePlan(selectedTenant.id, 'plan_free')}
+                        disabled={isApprovingPlan}
+                        className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-glow disabled:opacity-50 h-[38px]"
+                        title="Approve Free Plan immediately with ₹0 fee"
+                      >
+                        <CheckCircle2 className="h-4 w-4 text-purple-200" />
+                        <span>{isApprovingPlan ? 'Approving...' : 'Approve Free Plan'}</span>
+                      </button>
+
+                      {selectedPlanForApproval !== 'plan_free' && (
+                        <button
+                          onClick={() => handleApprovePlan(selectedTenant.id, selectedPlanForApproval)}
+                          disabled={isApprovingPlan}
+                          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-glow disabled:opacity-50 h-[38px]"
+                          title="Apply the selected plan without payment"
+                        >
+                          <Check className="h-4 w-4 text-indigo-200" />
+                          <span>Assign Selected</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl bg-purple-900/20 border border-purple-500/20 p-3 text-[11px] text-purple-200/90 space-y-1">
+                    <p className="font-semibold flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                      Instant Zero-Payment Approval Details:
+                    </p>
+                    <p className="text-slate-300 text-[10px]">
+                      • Immediately creates an active 365-day subscription record.<br />
+                      • Sets tenant workspace status to ACTIVE so they can connect UPI IDs and initiate transactions.<br />
+                      • Audited in platform logs as Super Admin Zero-Payment Approval.
+                    </p>
                   </div>
                 </div>
               </div>

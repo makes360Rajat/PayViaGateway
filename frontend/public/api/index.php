@@ -99,6 +99,13 @@ function getDb(): PDO {
             $pdo->exec("UPDATE tenants SET role = 'MERCHANT' WHERE email = 'pankajpanks007@gmail.com' AND role = 'SUPER_ADMIN'");
             $pdo->exec("UPDATE tenants SET role = 'SUPER_ADMIN' WHERE email = 'admin@payvia.vip'");
         } catch (Exception $e) {}
+
+        // Ensure default Free Plan exists for Super Admin manual approvals
+        try {
+            $pdo->exec("INSERT INTO plans (id, name, price, max_merchant_accounts, max_orders_per_day, max_api_keys, validity_days, features_json, is_active)
+                VALUES ('plan_free', 'Free Plan', 0.00, 2, 500, 2, 365, '[\"Free Merchant Accounts\",\"500 Orders / Day\",\"Webhooks & Instant Verification\",\"No Monthly Fees\"]', 1)
+                ON DUPLICATE KEY UPDATE name = VALUES(name), price = VALUES(price), is_active = 1");
+        } catch (Exception $e) {}
     }
     return $pdo;
 }
@@ -2985,6 +2992,78 @@ try {
             exit;
         }
 
+        // 12.4.1 Super Admin Manual Plan Approval (Without Payment under Free Plan or any selected tier)
+        if (preg_match('#^/api/admin/users/([^/]+)/approve-plan$#', $path, $m) && $method === 'POST') {
+            $targetUserId = $m[1];
+            $planId = $input['planId'] ?? $input['plan'] ?? 'plan_free';
+
+            $stmt = $db->prepare("SELECT * FROM tenants WHERE id = ?");
+            $stmt->execute([$targetUserId]);
+            $targetTenant = $stmt->fetch();
+            if (!$targetTenant) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Tenant not found']);
+                exit;
+            }
+
+            $stmt = $db->prepare("SELECT * FROM plans WHERE id = ?");
+            $stmt->execute([$planId]);
+            $plan = $stmt->fetch();
+
+            if (!$plan && $planId === 'plan_free') {
+                $db->exec("INSERT INTO plans (id, name, price, max_merchant_accounts, max_orders_per_day, max_api_keys, validity_days, features_json, is_active)
+                    VALUES ('plan_free', 'Free Plan', 0.00, 2, 500, 2, 365, '[\"Free Merchant Accounts\",\"500 Orders / Day\",\"Webhooks & Instant Verification\",\"No Monthly Fees\"]', 1)
+                    ON DUPLICATE KEY UPDATE name = VALUES(name), price = VALUES(price), is_active = 1");
+                $stmt = $db->prepare("SELECT * FROM plans WHERE id = ?");
+                $stmt->execute([$planId]);
+                $plan = $stmt->fetch();
+            }
+
+            if (!$plan) {
+                http_response_code(404);
+                echo json_encode(['status' => false, 'error' => 'Selected subscription plan not found']);
+                exit;
+            }
+
+            $now = gmdate('Y-m-d\TH:i:s\Z');
+            $validity = (int)($plan['validity_days'] ?: 365);
+            $expires = gmdate('Y-m-d\TH:i:s\Z', strtotime("+$validity days"));
+
+            // 1. Activate Tenant Workspace
+            $upd = $db->prepare("UPDATE tenants SET plan_id = ?, is_active = 1, updated_at = ? WHERE id = ?");
+            $upd->execute([$plan['id'], $now, $targetUserId]);
+
+            // 2. Activate Subscription
+            $stmt = $db->prepare("SELECT id FROM subscriptions WHERE tenant_id = ?");
+            $stmt->execute([$targetUserId]);
+            $sub = $stmt->fetch();
+
+            if ($sub) {
+                $updSub = $db->prepare("UPDATE subscriptions SET plan_id = ?, status = 'ACTIVE', starts_at = ?, expires_at = ?, orders_today = 0, last_reset_date = ? WHERE tenant_id = ?");
+                $updSub->execute([$plan['id'], $now, $expires, date('Y-m-d'), $targetUserId]);
+            } else {
+                $subId = 'sub_' . substr(bin2hex(random_bytes(6)), 0, 8);
+                $insSub = $db->prepare("INSERT INTO subscriptions (id, tenant_id, plan_id, status, starts_at, expires_at, orders_today, last_reset_date) VALUES (?, ?, ?, 'ACTIVE', ?, ?, 0, ?)");
+                $insSub->execute([$subId, $targetUserId, $plan['id'], $now, $expires, date('Y-m-d')]);
+            }
+
+            // 3. Log Audit Trail
+            PlanService::logAccess($targetUserId, 'ADMIN_MANUAL_PLAN_APPROVAL', '/api/admin/users/approve-plan', 'SUCCESS', "Super Admin approved tenant without payment under " . $plan['name'], $db);
+
+            echo json_encode([
+                'status' => true,
+                'message' => "✓ {$targetTenant['name']} successfully approved under {$plan['name']} without payment!",
+                'data' => [
+                    'tenantId' => $targetUserId,
+                    'planId' => $plan['id'],
+                    'planName' => $plan['name'],
+                    'expiresAt' => $expires,
+                    'status' => 'ACTIVE'
+                ]
+            ]);
+            exit;
+        }
+
         // 12.4 Admin User Update (Suspend / Activate / Change Plan / Edit Role)
         if (preg_match('#^/api/admin/users/([^/]+)$#', $path, $m) && ($method === 'PUT' || $method === 'PATCH')) {
             $targetUserId = $m[1];
@@ -2995,11 +3074,6 @@ try {
             if (isset($input['isActive'])) {
                 $updates[] = "is_active = ?";
                 $params[] = (int)$input['isActive'];
-            }
-            if (isset($input['planId']) || isset($input['plan'])) {
-                http_response_code(403);
-                echo json_encode(['status' => false, 'error' => 'Plans cannot be assigned manually. A verified subscription payment is required.']);
-                exit;
             }
             if (isset($input['role'])) {
                 $updates[] = "role = ?";
@@ -3016,6 +3090,34 @@ try {
             if (isset($input['name'])) {
                 $updates[] = "name = ?";
                 $params[] = $input['name'];
+            }
+
+            // Super Admin can assign/override any plan directly without requiring payment
+            if (isset($input['planId']) || isset($input['plan'])) {
+                $planId = $input['planId'] ?? $input['plan'];
+                $stmt = $db->prepare("SELECT * FROM plans WHERE id = ?");
+                $stmt->execute([$planId]);
+                $plan = $stmt->fetch();
+                if ($plan) {
+                    $updates[] = "plan_id = ?";
+                    $params[] = $plan['id'];
+
+                    $validity = (int)($plan['validity_days'] ?: 365);
+                    $expires = gmdate('Y-m-d\TH:i:s\Z', strtotime("+$validity days"));
+
+                    $subStmt = $db->prepare("SELECT id FROM subscriptions WHERE tenant_id = ?");
+                    $subStmt->execute([$targetUserId]);
+                    if ($subStmt->fetch()) {
+                        $updSub = $db->prepare("UPDATE subscriptions SET plan_id = ?, status = 'ACTIVE', starts_at = ?, expires_at = ?, orders_today = 0, last_reset_date = ? WHERE tenant_id = ?");
+                        $updSub->execute([$plan['id'], $now, $expires, date('Y-m-d'), $targetUserId]);
+                    } else {
+                        $subId = 'sub_' . substr(bin2hex(random_bytes(6)), 0, 8);
+                        $insSub = $db->prepare("INSERT INTO subscriptions (id, tenant_id, plan_id, status, starts_at, expires_at, orders_today, last_reset_date) VALUES (?, ?, ?, 'ACTIVE', ?, ?, 0, ?)");
+                        $insSub->execute([$subId, $targetUserId, $plan['id'], $now, $expires, date('Y-m-d')]);
+                    }
+
+                    PlanService::logAccess($targetUserId, 'ADMIN_MANUAL_PLAN_APPROVAL', '/api/admin/users', 'SUCCESS', "Super admin assigned {$plan['name']} without payment", $db);
+                }
             }
 
             $params[] = $targetUserId;

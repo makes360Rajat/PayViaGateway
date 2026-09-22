@@ -408,6 +408,13 @@ export class ApiService {
     });
   }
 
+  public static approveAdminTenantPlan(id: string, planId: string = 'plan_free') {
+    return this.request(`/admin/users/${id}/approve-plan`, {
+      method: 'POST',
+      body: JSON.stringify({ planId })
+    });
+  }
+
   public static createAdminMerchant(tenantId: string, data: any) {
     return this.request(`/admin/users/${tenantId}/merchants`, {
       method: 'POST',

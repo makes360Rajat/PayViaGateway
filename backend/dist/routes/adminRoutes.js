@@ -122,8 +122,78 @@ router.get('/users', (req, res) => {
     });
     return res.json({ status: true, data: usersWithStats });
 });
-// Update account controls. Subscription plans are changed exclusively by the
-// verified plan-payment flow; an admin dashboard request cannot grant a plan.
+// Super Admin Plan Approval without payment (Free Plan or any tier)
+router.post('/users/:id/approve-plan', (req, res) => {
+    const { id } = req.params;
+    const { planId = 'plan_free' } = req.body;
+    const tenant = database_1.db.findTenantById(id);
+    if (!tenant) {
+        return res.status(404).json({ status: false, error: 'User not found' });
+    }
+    let plan = database_1.db.plans.find(p => p.id === planId);
+    if (!plan && planId === 'plan_free') {
+        const freePlan = {
+            id: 'plan_free',
+            name: 'Free Plan',
+            price: 0,
+            maxMerchantAccounts: 2,
+            maxOrdersPerDay: 500,
+            maxApiKeys: 2,
+            validityDays: 365,
+            features: {
+                webhooks: true,
+                smsGateway: true,
+                crypto: false,
+                prioritySupport: false,
+                customBranding: false
+            },
+            isActive: true
+        };
+        database_1.db.plans.push(freePlan);
+        plan = freePlan;
+    }
+    if (!plan) {
+        return res.status(404).json({ status: false, error: 'Subscription plan not found' });
+    }
+    tenant.planId = plan.id;
+    tenant.isActive = true;
+    tenant.updatedAt = new Date().toISOString();
+    let sub = database_1.db.subscriptions.find(s => s.tenantId === tenant.id);
+    const now = new Date();
+    const expires = new Date(now.getTime() + (plan.validityDays || 365) * 86400000);
+    if (sub) {
+        sub.planId = plan.id;
+        sub.status = 'ACTIVE';
+        sub.startsAt = now.toISOString();
+        sub.expiresAt = expires.toISOString();
+        sub.ordersToday = 0;
+    }
+    else {
+        sub = {
+            id: 'sub_' + Math.random().toString(36).substring(2, 9),
+            tenantId: tenant.id,
+            planId: plan.id,
+            status: 'ACTIVE',
+            startsAt: now.toISOString(),
+            expiresAt: expires.toISOString(),
+            ordersToday: 0,
+            lastResetDate: now.toISOString().split('T')[0]
+        };
+        database_1.db.subscriptions.push(sub);
+    }
+    database_1.db.save();
+    return res.json({
+        status: true,
+        message: `✓ ${tenant.name} successfully approved under ${plan.name} without payment!`,
+        data: {
+            tenantId: tenant.id,
+            planId: plan.id,
+            planName: plan.name,
+            status: 'ACTIVE'
+        }
+    });
+});
+// Update account controls (Active/Inactive, Role, and Super Admin Plan override)
 router.put('/users/:id', (req, res) => {
     const { id } = req.params;
     const { planId, isActive, role } = req.body;
@@ -132,7 +202,31 @@ router.put('/users/:id', (req, res) => {
         return res.status(404).json({ status: false, error: 'User not found' });
     }
     if (planId !== undefined) {
-        return res.status(403).json({ status: false, error: 'Plans cannot be assigned manually. A verified subscription payment is required.' });
+        const plan = database_1.db.plans.find(p => p.id === planId);
+        if (plan) {
+            tenant.planId = plan.id;
+            let sub = database_1.db.subscriptions.find(s => s.tenantId === tenant.id);
+            const now = new Date();
+            const expires = new Date(now.getTime() + (plan.validityDays || 365) * 86400000);
+            if (sub) {
+                sub.planId = plan.id;
+                sub.status = 'ACTIVE';
+                sub.startsAt = now.toISOString();
+                sub.expiresAt = expires.toISOString();
+            }
+            else {
+                database_1.db.subscriptions.push({
+                    id: 'sub_' + Math.random().toString(36).substring(2, 9),
+                    tenantId: tenant.id,
+                    planId: plan.id,
+                    status: 'ACTIVE',
+                    startsAt: now.toISOString(),
+                    expiresAt: expires.toISOString(),
+                    ordersToday: 0,
+                    lastResetDate: now.toISOString().split('T')[0]
+                });
+            }
+        }
     }
     if (isActive !== undefined)
         tenant.isActive = isActive;
